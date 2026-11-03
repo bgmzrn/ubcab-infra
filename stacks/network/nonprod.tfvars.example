@@ -1,5 +1,5 @@
-name         = "network"
-env          = "nonprod"
+name = "network"
+env  = "nonprod"
 
 aws_region  = "ap-southeast-1"
 aws_profile = ""
@@ -9,3 +9,21 @@ vpc_cidr             = ""
 vpc_secondary_cidrs  = []
 enable_dns_support   = true
 enable_dns_hostnames = true
+
+public_subnets = {
+  a = {
+    id         = "subnet-REPLACE_PUBLIC_A"
+    cidr_block = "10.x.x.x/24"
+    az         = "ap-southeast-1a"
+    name       = "REPLACE_ME-public-a"
+  }
+}
+
+private_subnets = {
+  a = {
+    id         = "subnet-REPLACE_PRIVATE_A"
+    cidr_block = "10.x.x.x/24"
+    az         = "ap-southeast-1a"
+    name       = "REPLACE_ME-private-a"
+  }
+}

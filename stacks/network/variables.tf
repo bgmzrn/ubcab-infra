@@ -46,3 +46,32 @@ variable "enable_dns_support" {
 variable "enable_dns_hostnames" {
   type = bool
 }
+
+# Subnets
+variable "public_subnets" {
+  type = map(object({
+    id         = string
+    cidr_block = string
+    az         = string
+    name       = string
+  }))
+  description = "Public subnets keyed by AZ suffix (e.g. a, b, c)."
+  default     = {}
+}
+
+variable "private_subnets" {
+  type = map(object({
+    id         = string
+    cidr_block = string
+    az         = string
+    name       = string
+  }))
+  description = "Private subnets keyed by AZ suffix (e.g. a, b, c)."
+  default     = {}
+}
+
+variable "managed_repo" {
+  type        = string
+  description = "Managed repo name"
+  default     = "ubcabv4-infra"
+}
