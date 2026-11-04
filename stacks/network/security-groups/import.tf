@@ -116,3 +116,37 @@ import {
   to = aws_vpc_security_group_ingress_rule.redis["secondary"]
   id = "sgr-058ba37f40a0c9bf3"
 }
+
+import {
+  to = aws_security_group.rabbitmq
+  id = "sg-01eee1b8a0ac727e7"
+}
+
+import {
+  to = aws_vpc_security_group_ingress_rule.rabbitmq_amqp
+  id = "sgr-0d4af01ba1a607d8b"
+}
+import {
+  to = aws_vpc_security_group_ingress_rule.rabbitmq_epmd
+  id = "sgr-030c96fa2ad057fa6"
+}
+import {
+  to = aws_vpc_security_group_ingress_rule.rabbitmq_erlang
+  id = "sgr-018c0ff7855660ea0"
+}
+import {
+  to = aws_vpc_security_group_ingress_rule.rabbitmq_mgmt["unitel"]
+  id = "sgr-00c19cd8bd0d576d0"
+}
+import {
+  to = aws_vpc_security_group_ingress_rule.rabbitmq_mgmt["mobinet"]
+  id = "sgr-04bdb0cd0f8457c44"
+}
+import {
+  to = aws_vpc_security_group_ingress_rule.rabbitmq_prometheus["mobinet"]
+  id = "sgr-0b46a220f5de06ce0"
+}
+import {
+  to = aws_vpc_security_group_egress_rule.rabbitmq_tcp
+  id = "sgr-08f83788e8d07f515"
+}

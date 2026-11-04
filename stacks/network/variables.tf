@@ -147,6 +147,32 @@ variable "redis_ingress_cidrs" {
   default     = {}
 }
 
+variable "rabbitmq_sg" {
+  type = object({
+    name        = string
+    description = string
+  })
+  description = "RabbitMQ security group (shell; rules are separate resources)."
+}
+
+variable "rabbitmq_mgmt_cidrs" {
+  type = map(object({
+    cidr        = string
+    description = string
+  }))
+  description = "CIDR allowlist for RabbitMQ management UI (15672)."
+  default     = {}
+}
+
+variable "rabbitmq_prometheus_cidrs" {
+  type = map(object({
+    cidr        = string
+    description = string
+  }))
+  description = "CIDR allowlist for RabbitMQ Prometheus UI (15692)."
+  default     = {}
+}
+
 variable "managed_repo" {
   type        = string
   description = "Managed repo name"

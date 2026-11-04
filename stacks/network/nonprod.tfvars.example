@@ -91,3 +91,26 @@ redis_ingress_cidrs = {
     description = ""
   }
 }
+
+rabbitmq_sg = {
+  name        = ""
+  description = ""
+}
+
+rabbitmq_mgmt_cidrs = {
+  unitel = {
+    cidr        = ""
+    description = ""
+  }
+  mobinet = {
+    cidr        = ""
+    description = ""
+  }
+}
+
+rabbitmq_prometheus_cidrs = {
+  mobinet = {
+    cidr        = ""
+    description = ""
+  }
+}

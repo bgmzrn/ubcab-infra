@@ -87,3 +87,24 @@ variable "redis_ingress_cidrs" {
     description = string
   }))
 }
+
+variable "rabbitmq_sg" {
+  type = object({
+    name        = string
+    description = string
+  })
+}
+
+variable "rabbitmq_mgmt_cidrs" {
+  type = map(object({
+    cidr        = string
+    description = string
+  }))
+}
+
+variable "rabbitmq_prometheus_cidrs" {
+  type = map(object({
+    cidr        = string
+    description = string
+  }))
+}

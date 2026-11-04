@@ -16,4 +16,7 @@ module "security_groups" {
   default_sg                = var.default_sg
   redis_sg                  = var.redis_sg
   redis_ingress_cidrs       = var.redis_ingress_cidrs
+  rabbitmq_sg               = var.rabbitmq_sg
+  rabbitmq_mgmt_cidrs       = var.rabbitmq_mgmt_cidrs
+  rabbitmq_prometheus_cidrs = var.rabbitmq_prometheus_cidrs
 }
