@@ -73,3 +73,17 @@ variable "default_sg" {
   })
   description = "Name tag for the VPC default security group (group name is always \"default\")."
 }
+
+variable "redis_sg" {
+  type = object({
+    name        = string
+    description = string
+  })
+}
+
+variable "redis_ingress_cidrs" {
+  type = map(object({
+    cidr        = string
+    description = string
+  }))
+}

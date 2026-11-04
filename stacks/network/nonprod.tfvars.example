@@ -75,3 +75,19 @@ private_ssh_ingress_cidrs = {
 default_sg = {
   name = "Default SG"
 }
+
+redis_sg = {
+  name        = ""
+  description = ""
+}
+
+redis_ingress_cidrs = {
+  primary = {
+    cidr        = ""
+    description = ""
+  }
+  secondary = {
+    cidr        = ""
+    description = ""
+  }
+}

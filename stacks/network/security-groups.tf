@@ -14,4 +14,6 @@ module "security_groups" {
   private_ssh_sg            = var.private_ssh_sg
   private_ssh_ingress_cidrs = var.private_ssh_ingress_cidrs
   default_sg                = var.default_sg
+  redis_sg                  = var.redis_sg
+  redis_ingress_cidrs       = var.redis_ingress_cidrs
 }

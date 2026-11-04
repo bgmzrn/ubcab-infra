@@ -102,3 +102,17 @@ import {
   to = aws_default_security_group.default
   id = "sg-037d60015e8ac3b5c"
 }
+
+import {
+  to = aws_security_group.redis
+  id = "sg-0aed318e084900283"
+}
+
+import {
+  to = aws_vpc_security_group_ingress_rule.redis["primary"]
+  id = "sgr-07e17df73feb7ceb3"
+}
+import {
+  to = aws_vpc_security_group_ingress_rule.redis["secondary"]
+  id = "sgr-058ba37f40a0c9bf3"
+}
