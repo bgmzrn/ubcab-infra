@@ -28,11 +28,6 @@ variable "vpc_name" {
   type = string
 }
 
-variable "vpc_cidr" {
-  type        = string
-  description = "Primary VPC CIDR"
-}
-
 variable "vpc_secondary_cidrs" {
   type        = list(string)
   description = "Extra associated IPv4 CIDRs (not the primary). Empty = none."
@@ -50,7 +45,6 @@ variable "enable_dns_hostnames" {
 # Subnets
 variable "public_subnets" {
   type = map(object({
-    id         = string
     cidr_block = string
     az         = string
     name       = string
@@ -61,13 +55,79 @@ variable "public_subnets" {
 
 variable "private_subnets" {
   type = map(object({
-    id         = string
     cidr_block = string
     az         = string
     name       = string
   }))
   description = "Private subnets keyed by AZ suffix (e.g. a, b, c)."
   default     = {}
+}
+
+# Security groups
+variable "web_server_sg" {
+  type = object({
+    name        = string
+    description = string
+  })
+  description = "Shared web-server security group (shell; rules are separate resources)."
+}
+
+variable "web_server_ssh_cidrs" {
+  type = map(object({
+    cidr        = string
+    description = string
+  }))
+  description = "SSH allowlist for web-server SG."
+  default     = {}
+}
+
+variable "nat_sg" {
+  type = object({
+    name        = string
+    description = string
+  })
+  description = "NAT instance security group (shell; rules are separate resources)."
+}
+
+variable "nat_ssh_cidrs" {
+  type = map(object({
+    cidr        = string
+    description = string
+  }))
+  description = "SSH allowlist for NAT SG."
+  default     = {}
+}
+
+variable "mysql_sg" {
+  type = object({
+    name        = string
+    description = string
+  })
+  description = "MySQL security group (shell; rules are separate resources)."
+}
+
+variable "private_ssh_sg" {
+  type = object({
+    name        = string
+    description = string
+  })
+  description = "Private SSH security group (shell; rules are separate resources)."
+}
+
+variable "private_ssh_ingress_cidrs" {
+  type = map(object({
+    cidr        = string
+    description = string
+  }))
+  description = "SSH allowlist CIDRs for private-ssh SG."
+  default     = {}
+}
+
+variable "default_sg" {
+  type = object({
+    name = string
+  })
+  description = "Name tag for the VPC default security group (group name is always \"default\")."
 }
 
 variable "managed_repo" {

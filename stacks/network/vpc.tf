@@ -1,7 +1,12 @@
-resource "aws_vpc" "main" {
-  cidr_block           = var.vpc_cidr
+resource "aws_default_vpc" "main" {
   enable_dns_support   = var.enable_dns_support
   enable_dns_hostnames = var.enable_dns_hostnames
+
+  force_destroy = false
+
+  lifecycle {
+    prevent_destroy = true
+  }
 
   tags = {
     Name        = var.vpc_name
@@ -13,6 +18,6 @@ resource "aws_vpc" "main" {
 resource "aws_vpc_ipv4_cidr_block_association" "secondary" {
   for_each = toset(var.vpc_secondary_cidrs)
 
-  vpc_id     = aws_vpc.main.id
+  vpc_id     = aws_default_vpc.main.id
   cidr_block = each.value
 }

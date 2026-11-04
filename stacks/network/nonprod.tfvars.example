@@ -5,14 +5,12 @@ aws_region  = "ap-southeast-1"
 aws_profile = ""
 
 vpc_name             = ""
-vpc_cidr             = ""
 vpc_secondary_cidrs  = []
 enable_dns_support   = true
 enable_dns_hostnames = true
 
 public_subnets = {
   a = {
-    id         = "subnet-REPLACE_PUBLIC_A"
     cidr_block = "10.x.x.x/24"
     az         = "ap-southeast-1a"
     name       = "REPLACE_ME-public-a"
@@ -21,9 +19,59 @@ public_subnets = {
 
 private_subnets = {
   a = {
-    id         = "subnet-REPLACE_PRIVATE_A"
     cidr_block = "10.x.x.x/24"
     az         = "ap-southeast-1a"
     name       = "REPLACE_ME-private-a"
   }
+}
+
+# TODO should it be like this? (maybe rename?)
+web_server_sg = {
+  name        = ""
+  description = ""
+}
+
+# TODO what should I do with this? (rename, ignore bolds home?) (should I even store private ip etc?)
+web_server_ssh_cidrs = {
+}
+
+nat_sg = {
+  name        = ""
+  description = ""
+}
+
+nat_ssh_cidrs = {
+  office = {
+    cidr        = ""
+    description = ""
+  }
+  office_mobinet = {
+    cidr        = ""
+    description = ""
+  }
+  office_alt = {
+    cidr        = ""
+    description = ""
+  }
+}
+
+mysql_sg = {
+  name        = ""
+  description = ""
+}
+
+private_ssh_sg = {
+  name        = ""
+  description = ""
+}
+
+private_ssh_ingress_cidrs = {
+  host = {
+    cidr        = ""
+    description = ""
+  }
+}
+
+default_sg = {
+  name = "Default SG"
 }

@@ -1,5 +1,5 @@
 import {
-  to = aws_vpc.main
+  to = aws_default_vpc.main
   id = "vpc-0e4c0c5f87416d4f6"
 }
 
