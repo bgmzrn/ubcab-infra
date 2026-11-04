@@ -180,3 +180,37 @@ import {
   to = aws_vpc_security_group_egress_rule.postgresql_all
   id = "sgr-0263f2856c407ff48"
 }
+
+import {
+  to = aws_security_group.bastion
+  id = "sg-09d66e431b9e07682"
+}
+
+import {
+  to = aws_vpc_security_group_ingress_rule.bastion_http
+  id = "sgr-02a092558c01d1ec8"
+}
+import {
+  to = aws_vpc_security_group_ingress_rule.bastion_https
+  id = "sgr-0b07efd2c0750ce79"
+}
+import {
+  to = aws_vpc_security_group_ingress_rule.bastion_ssh["mobinet"]
+  id = "sgr-0afa4c620887e0cf6"
+}
+import {
+  to = aws_vpc_security_group_ingress_rule.bastion_ssh["nat_instance"]
+  id = "sgr-012976cfa4db27a77"
+}
+import {
+  to = aws_vpc_security_group_ingress_rule.bastion_ssh_from_nat
+  id = "sgr-0e8822589d79e7e69"
+}
+import {
+  to = aws_vpc_security_group_egress_rule.bastion_https_to_default
+  id = "sgr-0634bf559ceb68493"
+}
+import {
+  to = aws_vpc_security_group_egress_rule.bastion_all
+  id = "sgr-0c3d3720bb5bb5be0"
+}

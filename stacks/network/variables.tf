@@ -190,6 +190,23 @@ variable "postgresql_ingress_cidrs" {
   default     = {}
 }
 
+variable "bastion_sg" {
+  type = object({
+    name        = string
+    description = string
+  })
+  description = "Bastion host security group (shell; rules are separate resources)."
+}
+
+variable "bastion_ssh_cidrs" {
+  type = map(object({
+    cidr        = string
+    description = string
+  }))
+  description = "SSH allowlist CIDRs for bastion SG."
+  default     = {}
+}
+
 variable "managed_repo" {
   type        = string
   description = "Managed repo name"

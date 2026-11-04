@@ -130,3 +130,19 @@ postgresql_ingress_cidrs = {
     description = ""
   }
 }
+
+bastion_sg = {
+  name        = ""
+  description = ""
+}
+
+bastion_ssh_cidrs = {
+  mobinet = {
+    cidr        = ""
+    description = ""
+  }
+  nat_instance = {
+    cidr        = ""
+    description = ""
+  }
+}

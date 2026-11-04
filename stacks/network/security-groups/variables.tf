@@ -122,3 +122,17 @@ variable "postgresql_ingress_cidrs" {
     description = string
   }))
 }
+
+variable "bastion_sg" {
+  type = object({
+    name        = string
+    description = string
+  })
+}
+
+variable "bastion_ssh_cidrs" {
+  type = map(object({
+    cidr        = string
+    description = string
+  }))
+}
