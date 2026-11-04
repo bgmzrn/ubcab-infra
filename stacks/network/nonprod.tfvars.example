@@ -114,3 +114,19 @@ rabbitmq_prometheus_cidrs = {
     description = ""
   }
 }
+
+postgresql_sg = {
+  name        = ""
+  description = ""
+}
+
+postgresql_ingress_cidrs = {
+  nat_tunnel = {
+    cidr        = ""
+    description = ""
+  }
+  public_z = {
+    cidr        = ""
+    description = ""
+  }
+}

@@ -19,4 +19,6 @@ module "security_groups" {
   rabbitmq_sg               = var.rabbitmq_sg
   rabbitmq_mgmt_cidrs       = var.rabbitmq_mgmt_cidrs
   rabbitmq_prometheus_cidrs = var.rabbitmq_prometheus_cidrs
+  postgresql_sg             = var.postgresql_sg
+  postgresql_ingress_cidrs  = var.postgresql_ingress_cidrs
 }

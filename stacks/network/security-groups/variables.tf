@@ -108,3 +108,17 @@ variable "rabbitmq_prometheus_cidrs" {
     description = string
   }))
 }
+
+variable "postgresql_sg" {
+  type = object({
+    name        = string
+    description = string
+  })
+}
+
+variable "postgresql_ingress_cidrs" {
+  type = map(object({
+    cidr        = string
+    description = string
+  }))
+}

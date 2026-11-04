@@ -173,6 +173,23 @@ variable "rabbitmq_prometheus_cidrs" {
   default     = {}
 }
 
+variable "postgresql_sg" {
+  type = object({
+    name        = string
+    description = string
+  })
+  description = "PostgreSQL / RDS security group (shell; rules are separate resources)."
+}
+
+variable "postgresql_ingress_cidrs" {
+  type = map(object({
+    cidr        = string
+    description = string
+  }))
+  description = "Extra CIDR allowlist for PostgreSQL (5432), beyond private subnets."
+  default     = {}
+}
+
 variable "managed_repo" {
   type        = string
   description = "Managed repo name"

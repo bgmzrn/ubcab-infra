@@ -150,3 +150,33 @@ import {
   to = aws_vpc_security_group_egress_rule.rabbitmq_tcp
   id = "sgr-08f83788e8d07f515"
 }
+
+import {
+  to = aws_security_group.postgresql
+  id = "sg-05301b7d429be819f"
+}
+
+import {
+  to = aws_vpc_security_group_ingress_rule.postgresql_private["a"]
+  id = "sgr-00ea4c022ad88d95b"
+}
+import {
+  to = aws_vpc_security_group_ingress_rule.postgresql_private["b"]
+  id = "sgr-05c46f6ea044b00d8"
+}
+import {
+  to = aws_vpc_security_group_ingress_rule.postgresql_private["c"]
+  id = "sgr-06c41031b736d05f2"
+}
+import {
+  to = aws_vpc_security_group_ingress_rule.postgresql_extra["nat_tunnel"]
+  id = "sgr-0324459a76ec2c2c5"
+}
+import {
+  to = aws_vpc_security_group_ingress_rule.postgresql_extra["public_z"]
+  id = "sgr-0cca24e6ad08ce532"
+}
+import {
+  to = aws_vpc_security_group_egress_rule.postgresql_all
+  id = "sgr-0263f2856c407ff48"
+}
