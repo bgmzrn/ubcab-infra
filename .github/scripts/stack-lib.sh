@@ -70,3 +70,24 @@ list_all_stacks() {
   fi
   find "$root" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort
 }
+
+# Map tf_env → shared backends/<account>.hcl stem (nonprod | prod).
+# Stage-scoped dev/staging share the nonprod account bucket.
+backend_account_for_tf_env() {
+  local tf_env="$1"
+  case "$tf_env" in
+    nonprod|dev|staging) echo "nonprod" ;;
+    prod) echo "prod" ;;
+    *)
+      echo "Unknown tf_env for backend: $tf_env" >&2
+      return 1
+      ;;
+  esac
+}
+
+# State object key: <tf_env>/<stack>/terraform.tfstate
+backend_state_key() {
+  local tf_env="$1"
+  local stack="$2"
+  echo "${tf_env}/${stack}/terraform.tfstate"
+}

@@ -5,13 +5,3 @@ aws_region  = "ap-southeast-1"
 aws_profile = ""
 
 bucket_name = "tfstates-788430726908-ap-southeast-1"
-
-# state_access = {
-#   network = {
-#     prefixes = ["prod/network/*"]
-#     principal_arns = [
-#       "arn:aws:iam::788430726908:role/REPLACE_ME",
-#     ]
-#   }
-# }
-state_access = {}

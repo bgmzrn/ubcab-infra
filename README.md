@@ -7,15 +7,17 @@ Examples: shared S3 buckets, ECR repos, SQS queues, security groups, KMS keys, a
 ## Layout
 
 ```
+backends/            # Shared S3 backend configs (nonprod.hcl | prod.hcl)
 stacks/
-  tfstate/           # S3 remote-state bucket + per-stack state IAM (account-scoped)
+  tfstate/           # S3 remote-state bucket (account-scoped)
   network/           # VPC / subnets / shared SGs (account-scoped: nonprod | prod)
   <other>/           # future stacks (stage-scoped: dev | staging | prod)
+tf-init.sh           # Local: ./tf-init.sh <stack> <tf_env>
 ```
 
 Each stack is a small Terraform root (own state) so blast radius stays limited.
 
-After bootstrap, manage the state bucket and who may read/write which prefixes with `stacks/tfstate` (`state_access` in tfvars).
+After bootstrap, manage the state bucket with `stacks/tfstate`.
 
 ## Stack env schemes
 
@@ -49,15 +51,16 @@ Commit message `#skip-apply` skips apply workflows.
 ./bootstrap-bucket.sh [--profile PROFILE] [--region REGION] <name>
 ```
 
-Then manage the bucket with `stacks/tfstate` (see that stack’s README).
+Creates an empty bucket only (chicken-and-egg). Harden and manage it with `stacks/tfstate` (see that stack’s README).
 
 ## Local Terraform
 
+Shared S3 backend configs live under [`backends/`](backends/) (one file per AWS account). State key is always `<tf_env>/<stack>/terraform.tfstate`.
+
 ```bash
-cd stacks/network
-cp nonprod.tfvars.example nonprod.tfvars   # fill values; set aws_profile for local
-terraform init -backend-config=backend.nonprod.hcl
-terraform plan  -var-file=nonprod.tfvars
+cp stacks/network/nonprod.tfvars.example stacks/network/nonprod.tfvars   # fill values; set aws_profile for local
+./tf-init.sh network nonprod
+cd stacks/network && terraform plan -var-file=nonprod.tfvars
 ```
 
 Leave `aws_profile = ""` when using env/`AWS_*` credentials (CI does this via `-var=aws_profile=`).

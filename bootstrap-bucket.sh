@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Create an empty S3 bucket for Terraform remote state (chicken-and-egg).
+# Hardening (versioning, encryption, policy, …) is owned by stacks/tfstate.
 set -euo pipefail
 
 usage() {
@@ -10,6 +12,8 @@ Usage: $0 [--profile PROFILE] [--region REGION] <name>
   <name>     Required short name used in the bucket name
 
 Bucket name format: <name>-<account-id>-<region>
+
+Creates the bucket only. Apply stacks/tfstate next to configure it.
 EOF
   exit 1
 }
@@ -104,68 +108,8 @@ if [[ "$REGION" != "us-east-1" ]]; then
 fi
 aws "${CREATE_ARGS[@]}"
 
-aws "${AWS_ARGS[@]}" s3api put-bucket-versioning \
-  --bucket "$BUCKET" \
-  --versioning-configuration Status=Enabled
-
-aws "${AWS_ARGS[@]}" s3api put-bucket-encryption \
-  --bucket "$BUCKET" \
-  --server-side-encryption-configuration '{
-    "Rules": [{
-      "ApplyServerSideEncryptionByDefault": {
-        "SSEAlgorithm": "AES256"
-      }
-    }]
-  }'
-
-aws "${AWS_ARGS[@]}" s3api put-public-access-block \
-  --bucket "$BUCKET" \
-  --public-access-block-configuration \
-    BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
-
-POLICY_FILE=$(mktemp)
-trap 'rm -f "$POLICY_FILE"' EXIT
-
-cat > "$POLICY_FILE" <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "DenyInsecureTransport",
-      "Effect": "Deny",
-      "Principal": "*",
-      "Action": "s3:*",
-      "Resource": [
-        "arn:aws:s3:::$BUCKET",
-        "arn:aws:s3:::$BUCKET/*"
-      ],
-      "Condition": {
-        "Bool": {
-          "aws:SecureTransport": "false",
-          "aws:PrincipalIsAWSService": "false"
-        }
-      }
-    }
-  ]
-}
-EOF
-aws "${AWS_ARGS[@]}" s3api put-bucket-policy \
-  --bucket "$BUCKET" \
-  --policy "file://$POLICY_FILE"
-
-aws "${AWS_ARGS[@]}" s3api put-bucket-ownership-controls \
-  --bucket "$BUCKET" \
-  --ownership-controls 'Rules=[{ObjectOwnership=BucketOwnerEnforced}]'
-
-aws "${AWS_ARGS[@]}" s3api put-bucket-tagging \
-  --bucket "$BUCKET" \
-  --tagging "TagSet=[
-    {Key=Name,Value=${BUCKET}},
-    {Key=Purpose,Value=terraform-state},
-    {Key=ManagedBy,Value=bootstrap-script}
-  ]"
-
-echo "Done."
+echo "Done (create only)."
 echo "  bucket=$BUCKET"
 echo "  region=$REGION"
 echo "  profile=$EFFECTIVE_PROFILE"
+echo "Next: import the bucket in stacks/tfstate, then terraform apply."

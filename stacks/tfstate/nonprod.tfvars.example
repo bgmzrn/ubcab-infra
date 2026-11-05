@@ -5,15 +5,3 @@ aws_region  = "ap-southeast-1"
 aws_profile = ""
 
 bucket_name = "tfstates-606284766767-ap-southeast-1"
-
-# Grant stack CI / operator principals access to their state prefixes only.
-# Add an entry when you introduce a new stack (and its backend key prefix).
-# state_access = {
-#   network = {
-#     prefixes = ["nonprod/network/*"]
-#     principal_arns = [
-#       "arn:aws:iam::606284766767:role/REPLACE_ME",
-#     ]
-#   }
-# }
-state_access = {}

@@ -58,7 +58,15 @@ jobs:
           terraform_wrapper: false
 
       - name: Terraform init
-        run: terraform init -input=false -backend-config=backend.${{ inputs.tf_env }}.hcl
+        run: |
+          set -euo pipefail
+          # shellcheck source=/dev/null
+          source "${GITHUB_WORKSPACE}/.github/scripts/stack-lib.sh"
+          account="$(backend_account_for_tf_env "${{ inputs.tf_env }}")"
+          key="$(backend_state_key "${{ inputs.tf_env }}" "tfstate")"
+          terraform init -input=false \
+            -backend-config="${GITHUB_WORKSPACE}/backends/${account}.hcl" \
+            -backend-config="key=${key}"
 
       - name: Terraform plan
         if: inputs.action == 'plan'
