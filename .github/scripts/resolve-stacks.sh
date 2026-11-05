@@ -62,12 +62,10 @@ should_include() {
 stacks="$(collect_changed_stacks | tr ' ' '\n' | sed '/^$/d' | sort -u || true)"
 
 matrix_items=()
-skipped=()
 
 while IFS= read -r stack; do
   [[ -z "$stack" ]] && continue
   if ! should_include "$stack"; then
-    skipped+=("$stack")
     continue
   fi
   tf_env="$(map_tf_env "$stack" "$GIT_TARGET")"
@@ -76,8 +74,8 @@ while IFS= read -r stack; do
   else
     scheme="stage"
   fi
-  matrix_items+=("$(jq -nc --arg s "$stack" --arg e "$tf_env" --arg g "$GIT_TARGET" --arg sc "$scheme" \
-    '{stack:$s, tf_env:$e, git_target:$g, scheme:$sc}')")
+  matrix_items+=("$(jq -nc --arg s "$stack" --arg e "$tf_env" --arg sc "$scheme" \
+    '{stack:$s, tf_env:$e, scheme:$sc}')")
 done <<< "$stacks"
 
 if [[ ${#matrix_items[@]} -eq 0 ]]; then
