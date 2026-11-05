@@ -177,3 +177,20 @@ variable "bastion_ssh_cidrs" {
   description = "SSH allowlist CIDRs for bastion SG."
   default     = {}
 }
+
+variable "testing_sg" {
+  type = object({
+    name        = string
+    description = string
+  })
+  description = "Bulgaa testing"
+}
+
+variable "testing_ingress_cidrs" {
+  type = map(object({
+    cidr        = string
+    description = string
+  }))
+  description = "Bulgaa testing"
+  default     = {}
+}

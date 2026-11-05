@@ -1,10 +1,10 @@
 resource "aws_security_group" "testing" {
-  name        = var.redis_sg.name
-  description = var.redis_sg.description
+  name        = var.testing_sg.name
+  description = var.testing_sg.description
   vpc_id      = var.vpc_id
 
   tags = {
-    Name        = var.redis_sg.name
+    Name        = var.testing_sg.name
     ManagedRepo = module.constants.managed_repo
     Environment = var.env
   }
@@ -17,7 +17,7 @@ resource "aws_security_group" "testing" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "testing" {
-  for_each = var.redis_ingress_cidrs
+  for_each = var.testing_ingress_cidrs
 
   security_group_id = aws_security_group.testing.id
   ip_protocol       = "tcp"
