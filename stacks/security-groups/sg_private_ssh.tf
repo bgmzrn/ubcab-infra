@@ -5,7 +5,7 @@ resource "aws_security_group" "private_ssh" {
 
   tags = {
     Name        = var.private_ssh_sg.name
-    ManagedRepo = var.managed_repo
+    ManagedRepo = module.constants.managed_repo
     Environment = var.env
   }
 

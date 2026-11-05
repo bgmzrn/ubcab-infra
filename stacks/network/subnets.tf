@@ -8,7 +8,7 @@ resource "aws_subnet" "public" {
 
   tags = {
     Name        = each.value.name
-    ManagedRepo = var.managed_repo
+    ManagedRepo = module.constants.managed_repo
     Environment = var.env
     Tier        = "public"
   }
@@ -23,7 +23,7 @@ resource "aws_subnet" "private" {
 
   tags = {
     Name        = each.value.name
-    ManagedRepo = var.managed_repo
+    ManagedRepo = module.constants.managed_repo
     Environment = var.env
     Tier        = "private"
   }

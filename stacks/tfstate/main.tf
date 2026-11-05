@@ -14,7 +14,11 @@ terraform {
   }
 }
 
+module "constants" {
+  source = "../.."
+}
+
 provider "aws" {
-  region  = var.aws_region
+  region  = module.constants.aws_region
   profile = var.aws_profile != "" ? var.aws_profile : null
 }

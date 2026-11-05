@@ -18,7 +18,7 @@ resource "aws_default_security_group" "default" {
 
   tags = {
     Name        = var.default_sg.name
-    ManagedRepo = var.managed_repo
+    ManagedRepo = module.constants.managed_repo
     Environment = var.env
   }
 }

@@ -10,7 +10,7 @@ resource "aws_default_vpc" "main" {
 
   tags = {
     Name        = var.vpc_name
-    ManagedRepo = var.managed_repo
+    ManagedRepo = module.constants.managed_repo
     Environment = var.env
   }
 }

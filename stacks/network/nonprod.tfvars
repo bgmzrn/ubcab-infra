@@ -1,8 +1,7 @@
 name = "network"
 env  = "nonprod"
 
-aws_region  = "ap-southeast-1"
-aws_profile = "bulgaa"
+aws_profile = ""
 
 vpc_name             = "defaultSingapore"
 vpc_secondary_cidrs  = ["172.30.0.0/16"]

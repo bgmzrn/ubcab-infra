@@ -6,7 +6,7 @@ resource "aws_s3_bucket" "state" {
     Name        = var.bucket_name
     Purpose     = "terraform-state"
     ManagedBy   = "terraform"
-    ManagedRepo = var.managed_repo
+    ManagedRepo = module.constants.managed_repo
   }
 }
 

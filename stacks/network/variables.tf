@@ -14,11 +14,6 @@ variable "env" {
   }
 }
 
-variable "aws_region" {
-  type    = string
-  default = "ap-southeast-1"
-}
-
 variable "aws_profile" {
   type        = string
   description = "AWS shared-credentials profile for local use. Leave empty in CI (env credentials)."
@@ -63,10 +58,4 @@ variable "private_subnets" {
   }))
   description = "Private subnets keyed by AZ suffix (e.g. a, b, c)."
   default     = {}
-}
-
-variable "managed_repo" {
-  type        = string
-  description = "Managed repo name"
-  default     = "ubcabv4-infra"
 }

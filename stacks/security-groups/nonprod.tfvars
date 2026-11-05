@@ -1,8 +1,7 @@
 name = "security-groups"
 env  = "nonprod"
 
-aws_region  = "ap-southeast-1"
-aws_profile = "bulgaa"
+aws_profile = ""
 
 vpc_id = "vpc-0e4c0c5f87416d4f6"
 

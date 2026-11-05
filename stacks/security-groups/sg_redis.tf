@@ -5,7 +5,7 @@ resource "aws_security_group" "redis" {
 
   tags = {
     Name        = var.redis_sg.name
-    ManagedRepo = var.managed_repo
+    ManagedRepo = module.constants.managed_repo
     Environment = var.env
   }
 

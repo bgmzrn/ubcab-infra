@@ -14,11 +14,6 @@ variable "env" {
   }
 }
 
-variable "aws_region" {
-  type    = string
-  default = "ap-southeast-1"
-}
-
 variable "aws_profile" {
   type        = string
   description = "AWS shared-credentials profile for local use. Leave empty in CI (env credentials)."
@@ -181,10 +176,4 @@ variable "bastion_ssh_cidrs" {
   }))
   description = "SSH allowlist CIDRs for bastion SG."
   default     = {}
-}
-
-variable "managed_repo" {
-  type        = string
-  description = "Managed repo name"
-  default     = "ubcabv4-infra"
 }

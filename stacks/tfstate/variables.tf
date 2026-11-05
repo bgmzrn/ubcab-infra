@@ -14,11 +14,6 @@ variable "env" {
   }
 }
 
-variable "aws_region" {
-  type    = string
-  default = "ap-southeast-1"
-}
-
 variable "aws_profile" {
   type        = string
   description = "AWS shared-credentials profile for local use. Leave empty in CI (env credentials)."
@@ -28,10 +23,4 @@ variable "aws_profile" {
 variable "bucket_name" {
   type        = string
   description = "Existing Terraform state bucket name (from bootstrap-bucket.sh)."
-}
-
-variable "managed_repo" {
-  type        = string
-  description = "Managed repo name"
-  default     = "ubcabv4-infra"
 }
