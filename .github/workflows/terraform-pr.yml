@@ -34,12 +34,12 @@ permissions:
 
 jobs:
   resolve:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.resolve.outputs.matrix }}
       has_stacks: ${{ steps.resolve.outputs.has_stacks }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -56,10 +56,10 @@ jobs:
           .github/scripts/resolve-stacks.sh
 
   fmt:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ inputs.terraform_version }}
           terraform_wrapper: false
@@ -69,7 +69,7 @@ jobs:
   plan:
     needs: [resolve, fmt]
     if: needs.resolve.outputs.has_stacks == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Same Environment as apply so AWS_ACCESS_KEY_ID resolves per env (dev/staging/prod).
     environment: ${{ inputs.git_target }}
     strategy:
@@ -83,7 +83,7 @@ jobs:
       run:
         working-directory: stacks/${{ matrix.stack }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup AWS credentials
         uses: ./.github/actions/setup-aws-creds
@@ -97,7 +97,7 @@ jobs:
           stack: ${{ matrix.stack }}
           tf_env: ${{ matrix.tf_env }}
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ inputs.terraform_version }}
           terraform_wrapper: false
@@ -116,7 +116,7 @@ jobs:
 
       - name: Upload plan artifacts
         if: success() || failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: tfplan-${{ matrix.stack }}-${{ matrix.tf_env }}
           path: |
@@ -127,7 +127,7 @@ jobs:
 
       - name: PR comment
         if: always() && github.event_name == 'pull_request' && (success() || failure())
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           PLAN_EXIT: ${{ steps.plan.outputs.exit_code }}
           STACK: ${{ matrix.stack }}

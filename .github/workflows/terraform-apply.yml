@@ -38,13 +38,13 @@ permissions:
 
 jobs:
   resolve:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
       has_stacks: ${{ steps.set.outputs.has_stacks }}
       skip_apply: ${{ steps.skip.outputs.skip_apply }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -91,7 +91,7 @@ jobs:
   apply:
     needs: resolve
     if: needs.resolve.outputs.skip_apply != 'true' && needs.resolve.outputs.has_stacks == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: ${{ inputs.github_environment }}
     strategy:
       fail-fast: false
@@ -107,7 +107,7 @@ jobs:
       run:
         working-directory: stacks/${{ matrix.stack }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup AWS credentials
         uses: ./.github/actions/setup-aws-creds
@@ -121,7 +121,7 @@ jobs:
           stack: ${{ matrix.stack }}
           tf_env: ${{ matrix.tf_env }}
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ inputs.terraform_version }}
           terraform_wrapper: false

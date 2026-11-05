@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   map-target:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       git_target: ${{ steps.map.outputs.git_target }}
     steps:

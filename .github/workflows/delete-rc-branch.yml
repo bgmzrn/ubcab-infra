@@ -12,7 +12,7 @@ permissions:
 jobs:
   delete-rc-branch:
     if: startsWith(github.head_ref, 'release-candidate/')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Delete release-candidate branch
         env:
