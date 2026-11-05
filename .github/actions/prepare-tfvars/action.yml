@@ -1,0 +1,32 @@
+name: Prepare tfvars
+description: >
+  Prefer secret env TFVARS_<STACK>_<TF_ENV> (set by the caller from secrets).
+  Otherwise require stacks/<stack>/<tf_env>.tfvars in the repo.
+inputs:
+  stack:
+    required: true
+  tf_env:
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Ensure tfvars file
+      shell: bash
+      env:
+        STACK: ${{ inputs.stack }}
+        TF_ENV: ${{ inputs.tf_env }}
+      run: |
+        set -euo pipefail
+        dest="stacks/${STACK}/${TF_ENV}.tfvars"
+        key="TFVARS_$(echo "${STACK}_${TF_ENV}" | tr '[:lower:]' '[:upper:]' | tr '-' '_')"
+        content="${!key:-}"
+
+        if [[ -n "${content}" ]]; then
+          printf '%s\n' "$content" > "$dest"
+          echo "Wrote $dest from \$$key"
+        elif [[ -f "$dest" ]]; then
+          echo "Using existing $dest"
+        else
+          echo "::error::Missing $dest and secret/env $key. For personal CI: repo secret $key = full tfvars body (aws_profile=\"\"), or commit the tfvars file."
+          exit 1
+        fi

@@ -1,0 +1,75 @@
+name: tfstate-manual
+
+on:
+  workflow_dispatch:
+    inputs:
+      tf_env:
+        description: "nonprod | prod"
+        required: true
+        type: choice
+        options:
+          - nonprod
+          - prod
+      action:
+        description: "plan or apply"
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  tfstate:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.tf_env == 'prod' && 'prod' || 'dev' }}
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_ACCESS_KEY_ID_PROD: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+      AWS_SECRET_ACCESS_KEY_PROD: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+      AWS_DEFAULT_REGION: ap-southeast-1
+      TFVARS_TFSTATE_NONPROD: ${{ secrets.TFVARS_TFSTATE_NONPROD }}
+      TFVARS_TFSTATE_PROD: ${{ secrets.TFVARS_TFSTATE_PROD }}
+    defaults:
+      run:
+        working-directory: stacks/tfstate
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup AWS credentials
+        uses: ./.github/actions/setup-aws-creds
+        with:
+          tf_env: ${{ inputs.tf_env }}
+          vault_server: ${{ vars.VAULT_SERVER }}
+
+      - name: Prepare tfvars
+        uses: ./.github/actions/prepare-tfvars
+        with:
+          stack: tfstate
+          tf_env: ${{ inputs.tf_env }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+
+      - name: Terraform init
+        run: terraform init -input=false -backend-config=backend.${{ inputs.tf_env }}.hcl
+
+      - name: Terraform plan
+        if: inputs.action == 'plan'
+        run: |
+          terraform plan -input=false -no-color \
+            -var-file="${{ inputs.tf_env }}.tfvars" \
+            -var="aws_profile="
+
+      - name: Terraform apply
+        if: inputs.action == 'apply'
+        run: |
+          terraform apply -input=false -auto-approve \
+            -var-file="${{ inputs.tf_env }}.tfvars" \
+            -var="aws_profile="

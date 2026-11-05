@@ -1,0 +1,142 @@
+name: terraform-apply
+
+on:
+  workflow_call:
+    inputs:
+      git_target:
+        description: "dev | staging | prod"
+        required: true
+        type: string
+      github_environment:
+        description: "GitHub Environment name (dev|staging|prod)"
+        required: true
+        type: string
+      force_stacks:
+        required: false
+        type: string
+        default: ""
+      include_manual:
+        required: false
+        type: boolean
+        default: false
+      terraform_version:
+        required: false
+        type: string
+        default: "1.9.8"
+      before_sha:
+        required: false
+        type: string
+        default: ""
+      after_sha:
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+      has_stacks: ${{ steps.set.outputs.has_stacks }}
+      skip_apply: ${{ steps.skip.outputs.skip_apply }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check #skip-apply
+        id: skip
+        run: |
+          msg=$(jq -r '.head_commit.message // empty' "$GITHUB_EVENT_PATH" 2>/dev/null || true)
+          if echo "$msg" | grep -q '#skip-apply'; then
+            echo "skip_apply=true" >> "$GITHUB_OUTPUT"
+            echo "Commit contains #skip-apply — skipping apply"
+          else
+            echo "skip_apply=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve stacks
+        id: resolve
+        if: steps.skip.outputs.skip_apply != 'true'
+        env:
+          GIT_TARGET: ${{ inputs.git_target }}
+          MODE: apply
+          FORCE_STACKS: ${{ inputs.force_stacks }}
+          INCLUDE_MANUAL: ${{ inputs.include_manual }}
+          BEFORE_SHA: ${{ inputs.before_sha }}
+          AFTER_SHA: ${{ inputs.after_sha }}
+        run: |
+          chmod +x .github/scripts/*.sh
+          .github/scripts/resolve-stacks.sh
+
+      - name: Set outputs
+        id: set
+        env:
+          RESOLVED_MATRIX: ${{ steps.resolve.outputs.matrix }}
+          RESOLVED_HAS: ${{ steps.resolve.outputs.has_stacks }}
+          SKIP: ${{ steps.skip.outputs.skip_apply }}
+        run: |
+          if [[ "$SKIP" == "true" ]]; then
+            echo 'matrix={"include":[]}' >> "$GITHUB_OUTPUT"
+            echo "has_stacks=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "matrix=${RESOLVED_MATRIX}" >> "$GITHUB_OUTPUT"
+            echo "has_stacks=${RESOLVED_HAS}" >> "$GITHUB_OUTPUT"
+          fi
+
+  apply:
+    needs: resolve
+    if: needs.resolve.outputs.skip_apply != 'true' && needs.resolve.outputs.has_stacks == 'true'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.github_environment }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.resolve.outputs.matrix) }}
+    concurrency:
+      group: infra-${{ matrix.tf_env }}-${{ matrix.stack }}
+      cancel-in-progress: false
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_ACCESS_KEY_ID_PROD: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+      AWS_SECRET_ACCESS_KEY_PROD: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+      AWS_DEFAULT_REGION: ap-southeast-1
+      TFVARS_NETWORK_NONPROD: ${{ secrets.TFVARS_NETWORK_NONPROD }}
+      TFVARS_NETWORK_PROD: ${{ secrets.TFVARS_NETWORK_PROD }}
+      TFVARS_TFSTATE_NONPROD: ${{ secrets.TFVARS_TFSTATE_NONPROD }}
+      TFVARS_TFSTATE_PROD: ${{ secrets.TFVARS_TFSTATE_PROD }}
+    defaults:
+      run:
+        working-directory: stacks/${{ matrix.stack }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup AWS credentials
+        uses: ./.github/actions/setup-aws-creds
+        with:
+          tf_env: ${{ matrix.tf_env }}
+          vault_server: ${{ vars.VAULT_SERVER }}
+
+      - name: Prepare tfvars
+        uses: ./.github/actions/prepare-tfvars
+        with:
+          stack: ${{ matrix.stack }}
+          tf_env: ${{ matrix.tf_env }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+          terraform_wrapper: false
+
+      - name: Terraform init
+        run: terraform init -input=false -backend-config=backend.${{ matrix.tf_env }}.hcl
+
+      - name: Terraform apply
+        run: |
+          terraform apply -input=false -auto-approve \
+            -var-file="${{ matrix.tf_env }}.tfvars" \
+            -var="aws_profile="

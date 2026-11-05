@@ -1,0 +1,25 @@
+name: delete-rc-branch
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  delete-rc-branch:
+    if: startsWith(github.head_ref, 'release-candidate/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete release-candidate branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          echo "Deleting ${BRANCH}"
+          gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/${BRANCH}" \
+            || echo "Branch already deleted or missing"

@@ -1,0 +1,147 @@
+name: Setup AWS credentials
+description: >
+  Dual auth for personal vs mezorn. Prefer static AWS_* secrets (personal repo).
+  When vars.VAULT_SERVER is set and AWS secrets are absent, login to Vault via
+  GitHub OIDC and read dynamic AWS creds from VAULT_AWS_PATH.
+inputs:
+  tf_env:
+    description: Terraform env (nonprod|dev|staging|prod) — selects prod vs nonprod AWS secrets / vault path
+    required: true
+  vault_server:
+    description: Vault server id (ubcab|mezorn|cabpay). Empty = skip Vault.
+    required: false
+    default: ""
+  vault_aws_path_nonprod:
+    description: Vault AWS secret path for nonprod/dev/staging
+    required: false
+    default: "aws-ubcab-dev/creds/terraform-infra"
+  vault_aws_path_prod:
+    description: Vault AWS secret path for prod
+    required: false
+    default: "aws-ubcab/creds/terraform-infra"
+runs:
+  using: composite
+  steps:
+    - name: Resolve credential strategy
+      id: strategy
+      shell: bash
+      env:
+        TF_ENV: ${{ inputs.tf_env }}
+        VAULT_SERVER: ${{ inputs.vault_server }}
+        AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
+        AWS_ACCESS_KEY_ID_PROD: ${{ env.AWS_ACCESS_KEY_ID_PROD }}
+      run: |
+        set -euo pipefail
+        is_prod=false
+        [[ "$TF_ENV" == "prod" ]] && is_prod=true
+
+        # Prefer Vault when configured (mezorn). Else static AWS secrets (personal bootstrap).
+        if [[ -n "${VAULT_SERVER:-}" ]]; then
+          echo "mode=vault" >> "$GITHUB_OUTPUT"
+        elif [[ "$is_prod" == "true" && -n "${AWS_ACCESS_KEY_ID_PROD:-}" ]]; then
+          echo "mode=static_prod" >> "$GITHUB_OUTPUT"
+        elif [[ -n "${AWS_ACCESS_KEY_ID:-}" ]]; then
+          echo "mode=static" >> "$GITHUB_OUTPUT"
+        else
+          echo "::error::No AWS credentials. Set secrets AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (personal), or set VAULT_SERVER for mezorn Vault OIDC."
+          exit 1
+        fi
+        echo "is_prod=$is_prod" >> "$GITHUB_OUTPUT"
+
+    - name: Export static AWS credentials (nonprod account)
+      if: steps.strategy.outputs.mode == 'static'
+      shell: bash
+      env:
+        AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}
+      run: |
+        set -euo pipefail
+        echo "::add-mask::$AWS_ACCESS_KEY_ID"
+        echo "::add-mask::$AWS_SECRET_ACCESS_KEY"
+        echo "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID" >> "$GITHUB_ENV"
+        echo "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY" >> "$GITHUB_ENV"
+        echo "AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-ap-southeast-1}" >> "$GITHUB_ENV"
+        echo "Using static AWS credentials (personal / bootstrap mode)"
+
+    - name: Export static AWS credentials (prod account)
+      if: steps.strategy.outputs.mode == 'static_prod'
+      shell: bash
+      env:
+        AWS_ACCESS_KEY_ID_PROD: ${{ env.AWS_ACCESS_KEY_ID_PROD }}
+        AWS_SECRET_ACCESS_KEY_PROD: ${{ env.AWS_SECRET_ACCESS_KEY_PROD }}
+      run: |
+        set -euo pipefail
+        echo "::add-mask::$AWS_ACCESS_KEY_ID_PROD"
+        echo "::add-mask::$AWS_SECRET_ACCESS_KEY_PROD"
+        echo "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID_PROD" >> "$GITHUB_ENV"
+        echo "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY_PROD" >> "$GITHUB_ENV"
+        echo "AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-ap-southeast-1}" >> "$GITHUB_ENV"
+        echo "Using static AWS prod credentials"
+
+    - name: Resolve Vault URL
+      if: steps.strategy.outputs.mode == 'vault'
+      id: vault_url
+      shell: bash
+      env:
+        VAULT_SERVER: ${{ inputs.vault_server }}
+      run: |
+        set -euo pipefail
+        case "$VAULT_SERVER" in
+          mezorn) url="https://mezorn-vault.mzn.mn/" ;;
+          ubcab)  url="https://vault.v4.ubcabtech.com/" ;;
+          cabpay) url="https://cabpay-vault.mezorn.com/" ;;
+          *)
+            echo "Unknown VAULT_SERVER: $VAULT_SERVER"
+            exit 1
+            ;;
+        esac
+        echo "url=$url" >> "$GITHUB_OUTPUT"
+
+    - name: Vault login (GitHub OIDC)
+      if: steps.strategy.outputs.mode == 'vault'
+      uses: hashicorp/vault-action@v4.0.0
+      with:
+        url: ${{ steps.vault_url.outputs.url }}
+        method: jwt
+        path: github-actions
+        role: ${{ github.event.repository.name }}
+        jwtGithubAudience: https://github.com/mezorn-com
+        exportToken: true
+        tlsSkipVerify: true
+
+    - name: Read AWS creds from Vault
+      if: steps.strategy.outputs.mode == 'vault'
+      shell: bash
+      env:
+        TF_ENV: ${{ inputs.tf_env }}
+        VAULT_AWS_PATH_NONPROD: ${{ inputs.vault_aws_path_nonprod }}
+        VAULT_AWS_PATH_PROD: ${{ inputs.vault_aws_path_prod }}
+      run: |
+        set -euo pipefail
+        if [[ "$TF_ENV" == "prod" ]]; then
+          path="$VAULT_AWS_PATH_PROD"
+        else
+          path="$VAULT_AWS_PATH_NONPROD"
+        fi
+        echo "Reading Vault AWS path: $path"
+        if ! command -v vault >/dev/null 2>&1; then
+          curl -fsSL https://releases.hashicorp.com/vault/1.17.6/vault_1.17.6_linux_amd64.zip -o /tmp/vault.zip
+          sudo unzip -o /tmp/vault.zip -d /usr/local/bin vault
+        fi
+        json="$(vault read -format=json "$path")"
+        access_key="$(echo "$json" | jq -r '.data.access_key // .data.access_key_id')"
+        secret_key="$(echo "$json" | jq -r '.data.secret_key // .data.secret_access_key')"
+        security_token="$(echo "$json" | jq -r '.data.security_token // .data.session_token // empty')"
+        if [[ -z "$access_key" || "$access_key" == "null" ]]; then
+          echo "::error::Vault path $path did not return access_key. Provision terraform-infra AWS roles first."
+          exit 1
+        fi
+        echo "::add-mask::$access_key"
+        echo "::add-mask::$secret_key"
+        echo "AWS_ACCESS_KEY_ID=$access_key" >> "$GITHUB_ENV"
+        echo "AWS_SECRET_ACCESS_KEY=$secret_key" >> "$GITHUB_ENV"
+        if [[ -n "$security_token" && "$security_token" != "null" ]]; then
+          echo "::add-mask::$security_token"
+          echo "AWS_SESSION_TOKEN=$security_token" >> "$GITHUB_ENV"
+        fi
+        echo "AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-ap-southeast-1}" >> "$GITHUB_ENV"

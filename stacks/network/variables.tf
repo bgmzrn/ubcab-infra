@@ -20,7 +20,9 @@ variable "aws_region" {
 }
 
 variable "aws_profile" {
-  type = string
+  type        = string
+  description = "AWS shared-credentials profile for local use. Leave empty in CI (env credentials)."
+  default     = ""
 }
 
 # VPC
