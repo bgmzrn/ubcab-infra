@@ -8,12 +8,14 @@ Examples: shared S3 buckets, ECR repos, SQS queues, security groups, KMS keys, a
 
 ```
 stacks/
-  tfstate/           # S3 remote-state bucket (account-scoped: nonprod | prod)
+  tfstate/           # S3 remote-state bucket + per-stack state IAM (account-scoped)
   network/           # VPC / subnets / shared SGs (account-scoped: nonprod | prod)
   <other>/           # future stacks (stage-scoped: dev | staging | prod)
 ```
 
 Each stack is a small Terraform root (own state) so blast radius stays limited.
+
+After bootstrap, manage the state bucket and who may read/write which prefixes with `stacks/tfstate` (`state_access` in tfvars).
 
 ## Stack env schemes
 
