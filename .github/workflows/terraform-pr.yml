@@ -25,7 +25,7 @@ on:
       terraform_version:
         required: false
         type: string
-        default: "1.9.8"
+        default: "1.17.1"
 
 permissions:
   contents: read
