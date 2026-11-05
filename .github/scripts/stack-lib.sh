@@ -47,21 +47,6 @@ map_tf_env() {
   fi
 }
 
-# Normalize branch / base_ref → git_target
-branch_to_git_target() {
-  local ref="$1"
-  ref="${ref#refs/heads/}"
-  case "$ref" in
-    development) echo "dev" ;;
-    release-candidate|release-candidate/*) echo "staging" ;;
-    main) echo "prod" ;;
-    *)
-      echo "Unsupported branch for env mapping: $ref" >&2
-      return 1
-      ;;
-  esac
-}
-
 # List stack directory names under stacks/ (top-level only)
 list_all_stacks() {
   local root="${1:-stacks}"

@@ -27,7 +27,6 @@ runs:
       id: strategy
       shell: bash
       env:
-        TF_ENV: ${{ inputs.tf_env }}
         VAULT_SERVER: ${{ inputs.vault_server }}
         AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
       run: |
@@ -39,11 +38,6 @@ runs:
         else
           echo "::error::No AWS credentials. Set environment (or repo) secrets AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY, or set VAULT_SERVER for Vault OIDC."
           exit 1
-        fi
-        if [[ "$TF_ENV" == "prod" ]]; then
-          echo "is_prod=true" >> "$GITHUB_OUTPUT"
-        else
-          echo "is_prod=false" >> "$GITHUB_OUTPUT"
         fi
 
     - name: Export static AWS credentials
