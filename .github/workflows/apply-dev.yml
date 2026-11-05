@@ -1,0 +1,27 @@
+name: apply-dev
+
+on:
+  push:
+    branches:
+      - development
+  workflow_dispatch:
+    inputs:
+      force_stacks:
+        description: "Comma-separated stacks (empty = path diff / all on dispatch)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  apply:
+    uses: ./.github/workflows/terraform-apply.yml
+    with:
+      git_target: dev
+      github_environment: dev
+      force_stacks: ${{ github.event.inputs.force_stacks || '' }}
+      before_sha: ${{ github.event.before || '' }}
+      after_sha: ${{ github.sha }}
+    secrets: inherit

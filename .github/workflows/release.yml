@@ -1,0 +1,94 @@
+name: release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch tags
+        run: git fetch --force --tags
+
+      - name: Compute next date tag (Asia/Ulaanbaatar)
+        id: tag
+        run: |
+          set -euo pipefail
+          base="$(TZ=Asia/Ulaanbaatar date +'%Y.%m.%d')"
+          max_n=0
+          if git tag -l "${base}" | grep -qx "${base}"; then
+            max_n=1
+          fi
+          while IFS= read -r t; do
+            n="${t#${base}-}"
+            if [[ "$n" =~ ^[0-9]+$ ]] && (( n > max_n )); then
+              max_n="$n"
+            fi
+          done < <(git tag -l "${base}-*")
+          if (( max_n == 0 )); then
+            tag="${base}"
+          else
+            tag="${base}-$((max_n + 1))"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Create git tag and push
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "Tag already exists: ${TAG}"
+            exit 0
+          fi
+          git tag -a "${TAG}" -m "Release ${TAG}"
+          git push origin "refs/tags/${TAG}"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release create "${TAG}" --title "${TAG}" --generate-notes --latest
+
+  sync-development:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Merge main → development
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main development
+          git checkout development
+          git reset --hard origin/development
+          if ! git merge "origin/main" --no-ff -m "chore: sync main -> development"; then
+            echo "Conflict — aborting sync"
+            git merge --abort || true
+            exit 0
+          fi
+          git push origin development

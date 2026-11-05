@@ -1,0 +1,189 @@
+name: terraform-pr
+
+on:
+  workflow_call:
+    inputs:
+      git_target:
+        description: "dev | staging | prod (maps to per-stack tf_env)"
+        required: true
+        type: string
+      base_ref:
+        description: "PR base branch name for diff (e.g. development)"
+        required: false
+        type: string
+        default: ""
+      force_stacks:
+        description: "Optional comma-separated stacks (skip path diff)"
+        required: false
+        type: string
+        default: ""
+      include_manual:
+        description: "Include tfstate in matrix"
+        required: false
+        type: boolean
+        default: false
+      terraform_version:
+        required: false
+        type: string
+        default: "1.9.8"
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.resolve.outputs.matrix }}
+      has_stacks: ${{ steps.resolve.outputs.has_stacks }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve stacks
+        id: resolve
+        env:
+          GIT_TARGET: ${{ inputs.git_target }}
+          MODE: plan
+          BASE_REF: ${{ inputs.base_ref }}
+          FORCE_STACKS: ${{ inputs.force_stacks }}
+          INCLUDE_MANUAL: ${{ inputs.include_manual }}
+        run: |
+          chmod +x .github/scripts/*.sh
+          .github/scripts/resolve-stacks.sh
+
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+          terraform_wrapper: false
+      - name: terraform fmt -check
+        run: terraform fmt -check -recursive -diff
+
+  plan:
+    needs: [resolve, fmt]
+    if: needs.resolve.outputs.has_stacks == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.resolve.outputs.matrix) }}
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_ACCESS_KEY_ID_PROD: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+      AWS_SECRET_ACCESS_KEY_PROD: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+      AWS_DEFAULT_REGION: ap-southeast-1
+      TFVARS_NETWORK_NONPROD: ${{ secrets.TFVARS_NETWORK_NONPROD }}
+      TFVARS_NETWORK_PROD: ${{ secrets.TFVARS_NETWORK_PROD }}
+      TFVARS_TFSTATE_NONPROD: ${{ secrets.TFVARS_TFSTATE_NONPROD }}
+      TFVARS_TFSTATE_PROD: ${{ secrets.TFVARS_TFSTATE_PROD }}
+    defaults:
+      run:
+        working-directory: stacks/${{ matrix.stack }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup AWS credentials
+        uses: ./.github/actions/setup-aws-creds
+        with:
+          tf_env: ${{ matrix.tf_env }}
+          vault_server: ${{ vars.VAULT_SERVER }}
+
+      - name: Prepare tfvars
+        uses: ./.github/actions/prepare-tfvars
+        with:
+          stack: ${{ matrix.stack }}
+          tf_env: ${{ matrix.tf_env }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+          terraform_wrapper: false
+
+      - name: Terraform init
+        run: terraform init -input=false -backend-config=backend.${{ matrix.tf_env }}.hcl
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan
+        id: plan
+        run: |
+          set -euo pipefail
+          set +e
+          terraform plan -input=false -no-color -detailed-exitcode \
+            -var-file="${{ matrix.tf_env }}.tfvars" \
+            -var="aws_profile=" \
+            -out=tfplan \
+            2>&1 | tee plan.txt
+          code=${PIPESTATUS[0]}
+          set -e
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          if [[ "$code" -eq 1 ]]; then
+            exit 1
+          fi
+          exit 0
+
+      - name: PR comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          PLAN_EXIT: ${{ steps.plan.outputs.exit_code }}
+          STACK: ${{ matrix.stack }}
+          TF_ENV: ${{ matrix.tf_env }}
+          SCHEME: ${{ matrix.scheme }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = `stacks/${process.env.STACK}/plan.txt`;
+            let plan = fs.existsSync(path) ? fs.readFileSync(path, 'utf8') : '(no plan output)';
+            const max = 60000;
+            if (plan.length > max) {
+              plan = plan.slice(0, max) + '\n\n… truncated …';
+            }
+            const exit = process.env.PLAN_EXIT;
+            const status = exit === '0' ? 'No changes' : exit === '2' ? 'Changes present' : `Exit ${exit}`;
+            const marker = `<!-- terraform-plan:${process.env.STACK}:${process.env.TF_ENV} -->`;
+            const body = [
+              marker,
+              `### Terraform plan \`${process.env.STACK}\` (\`${process.env.TF_ENV}\`)`,
+              '',
+              `- Scheme: **${process.env.SCHEME}**`,
+              `- Result: **${status}**`,
+              '',
+              '<details><summary>Plan output</summary>',
+              '',
+              '```',
+              plan,
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

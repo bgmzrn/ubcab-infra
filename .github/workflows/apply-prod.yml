@@ -1,0 +1,27 @@
+name: apply-prod
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      force_stacks:
+        description: "Comma-separated stacks"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  apply:
+    uses: ./.github/workflows/terraform-apply.yml
+    with:
+      git_target: prod
+      github_environment: prod
+      force_stacks: ${{ github.event.inputs.force_stacks || '' }}
+      before_sha: ${{ github.event.before || '' }}
+      after_sha: ${{ github.sha }}
+    secrets: inherit

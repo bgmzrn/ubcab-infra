@@ -1,0 +1,83 @@
+name: create-release-candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch_suffix:
+        description: "Optional suffix → release-candidate/YYYYMMDD-suffix"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-release-candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Ensure development is up to date
+        run: |
+          set -euo pipefail
+          git fetch origin development
+          git checkout development
+          git reset --hard origin/development
+
+      - name: Check for existing release-candidate branches
+        run: |
+          set -euo pipefail
+          if git ls-remote --heads origin "release-candidate/*" | grep -q .; then
+            echo "A release-candidate branch already exists:"
+            git ls-remote --heads origin "release-candidate/*"
+            echo "Only one release-candidate branch is allowed at a time."
+            exit 1
+          fi
+
+      - name: Create release-candidate branch
+        id: create
+        env:
+          SUFFIX: ${{ inputs.branch_suffix }}
+        run: |
+          set -euo pipefail
+          DATE="$(TZ=Asia/Ulaanbaatar date +%Y%m%d)"
+          if [[ -n "${SUFFIX:-}" ]]; then
+            SAFE_SUFFIX="$(echo "${SUFFIX}" \
+              | tr '[:upper:]' '[:lower:]' \
+              | sed -E 's/[^a-z0-9._-]+/-/g' \
+              | sed -E 's/^-+|-+$//g')"
+            BRANCH="release-candidate/${DATE}-${SAFE_SUFFIX}"
+          else
+            BRANCH="release-candidate/${DATE}"
+          fi
+          git checkout -b "${BRANCH}" origin/development
+          git push origin "${BRANCH}"
+          echo "branch_name=${BRANCH}" >> "$GITHUB_OUTPUT"
+
+      - name: Open PR to main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ steps.create.outputs.branch_name }}
+        run: |
+          set -euo pipefail
+          url="$(gh pr create \
+            --base main \
+            --head "${BRANCH}" \
+            --title "Release candidate: ${BRANCH}" \
+            --body "$(cat <<EOF
+          ## Release candidate
+
+          Promotes \`development\` → \`main\` (prod plan on this PR; apply on merge).
+
+          - Account-scoped stacks (\`network\`): prod plan
+          - Stage-scoped stacks: prod plan
+
+          After merge, \`apply-prod\` runs (GitHub Environment **prod**).
+          EOF
+          )")"
+          echo "PR: $url"
