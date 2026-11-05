@@ -103,95 +103,39 @@ jobs:
           terraform_wrapper: false
 
       - name: Terraform init
-        run: |
-          set -euo pipefail
-          # shellcheck source=/dev/null
-          source "${GITHUB_WORKSPACE}/.github/scripts/stack-lib.sh"
-          account="$(backend_account_for_tf_env "${{ matrix.tf_env }}")"
-          key="$(backend_state_key "${{ matrix.tf_env }}" "${{ matrix.stack }}")"
-          terraform init -input=false \
-            -backend-config="${GITHUB_WORKSPACE}/backends/${account}.hcl" \
-            -backend-config="key=${key}"
+        run: bash "${GITHUB_WORKSPACE}/.github/scripts/ci-terraform.sh" init "${{ matrix.tf_env }}" "${{ matrix.stack }}"
 
       - name: Terraform validate
-        run: terraform validate
+        run: bash "${GITHUB_WORKSPACE}/.github/scripts/ci-terraform.sh" validate
 
       - name: Terraform plan
         id: plan
-        run: |
-          set -euo pipefail
-          # shellcheck source=/dev/null
-          source "${GITHUB_WORKSPACE}/.github/scripts/stack-lib.sh"
-          vf=()
-          tf_var_file_args "${{ matrix.tf_env }}" vf
-          set +e
-          terraform plan -input=false -no-color -detailed-exitcode \
-            "${vf[@]}" \
-            -var="aws_profile=" \
-            -out=tfplan \
-            2>&1 | tee plan.txt
-          code=${PIPESTATUS[0]}
-          set -e
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-          if [[ "$code" -eq 1 ]]; then
-            exit 1
-          fi
-          exit 0
+        run: >
+          bash "${GITHUB_WORKSPACE}/.github/scripts/ci-terraform.sh" plan "${{ matrix.tf_env }}"
+          --detailed-exitcode --out tfplan --tee plan.txt
+
+      - name: Upload plan artifacts
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ matrix.stack }}-${{ matrix.tf_env }}
+          path: |
+            stacks/${{ matrix.stack }}/plan.txt
+            stacks/${{ matrix.stack }}/tfplan
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: PR comment
-        if: github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request' && (success() || failure())
         uses: actions/github-script@v7
         env:
           PLAN_EXIT: ${{ steps.plan.outputs.exit_code }}
           STACK: ${{ matrix.stack }}
           TF_ENV: ${{ matrix.tf_env }}
           SCHEME: ${{ matrix.scheme }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ARTIFACT_NAME: tfplan-${{ matrix.stack }}-${{ matrix.tf_env }}
         with:
           script: |
-            const fs = require('fs');
-            const path = `stacks/${process.env.STACK}/plan.txt`;
-            let plan = fs.existsSync(path) ? fs.readFileSync(path, 'utf8') : '(no plan output)';
-            const max = 60000;
-            if (plan.length > max) {
-              plan = plan.slice(0, max) + '\n\n… truncated …';
-            }
-            const exit = process.env.PLAN_EXIT;
-            const status = exit === '0' ? 'No changes' : exit === '2' ? 'Changes present' : `Exit ${exit}`;
-            const marker = `<!-- terraform-plan:${process.env.STACK}:${process.env.TF_ENV} -->`;
-            const body = [
-              marker,
-              `### Terraform plan \`${process.env.STACK}\` (\`${process.env.TF_ENV}\`)`,
-              '',
-              `- Scheme: **${process.env.SCHEME}**`,
-              `- Result: **${status}**`,
-              '',
-              '<details><summary>Plan output</summary>',
-              '',
-              '```',
-              plan,
-              '```',
-              '',
-              '</details>',
-            ].join('\n');
-
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            const existing = comments.find(c => c.body && c.body.includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-              });
-            }
+            const postPlanComment = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/post-plan-comment.js`);
+            await postPlanComment({ github, context });
