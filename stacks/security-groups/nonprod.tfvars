@@ -150,19 +150,3 @@ bastion_ssh_cidrs = {
     description = "NAT Instance"
   }
 }
-
-testing_sg = {
-  name        = "testing"
-  description = "Bulgaa testing"
-}
-
-testing_ingress_cidrs = {
-  primary = {
-    cidr        = "172.31.0.0/16"
-    description = "Bulgaa testing"
-  }
-  secondary = {
-    cidr        = "172.30.0.0/16"
-    description = "Bulgaa testing"
-  }
-}
