@@ -10,7 +10,15 @@
 const fs = require('fs');
 const path = require('path');
 
-const PREVIEW_MAX = 8000;
+// GitHub issue/PR comment body max is 65536; leave room for the markdown wrapper.
+const PLAN_MAX = 60000;
+
+function fencePlan(plan) {
+  // Avoid closing the markdown fence early if the plan contains ```.
+  const longest = (plan.match(/`+/g) || []).reduce((n, s) => Math.max(n, s.length), 0);
+  const ticks = '`'.repeat(Math.max(3, longest + 1));
+  return `${ticks}\n${plan}\n${ticks}`;
+}
 
 function buildCommentBody(plan, env) {
   const exit = env.PLAN_EXIT || '1';
@@ -28,23 +36,14 @@ function buildCommentBody(plan, env) {
       ? 'Plan: **0** to add, **0** to change, **0** to destroy'
       : '_No Plan: summary found_');
 
-  const resourceLines = plan
-    .split('\n')
-    .filter((line) => /^\s*#\s+.+\s+will be\b|^\s*#\s+.+\s+must be replaced\b/i.test(line))
-    .map((line) => line.trim())
-    .slice(0, 40);
-  const resourceBlock = resourceLines.length
-    ? ['', '**Resources:**', ...resourceLines.map((l) => `- \`${l.replace(/^#\s*/, '')}\``)].join('\n')
-    : '';
-
-  let preview = plan.trimEnd();
+  let output = plan.trimEnd();
   let truncated = false;
-  if (preview.length > PREVIEW_MAX) {
-    preview = preview.slice(0, PREVIEW_MAX).trimEnd();
+  if (output.length > PLAN_MAX) {
+    output = output.slice(0, PLAN_MAX).trimEnd();
     truncated = true;
   }
   if (truncated) {
-    preview += '\n\n… truncated — download the artifact for the full plan.txt …';
+    output += '\n\n… truncated — download the artifact for the full plan.txt …';
   }
 
   const marker = `<!-- terraform-plan:${env.STACK}:${env.TF_ENV} -->`;
@@ -56,13 +55,10 @@ function buildCommentBody(plan, env) {
     `- Result: **${status}**`,
     `- ${planSummary}`,
     `- Full plan: [\`${env.ARTIFACT_NAME}\`](${env.RUN_URL}) (Artifacts on the workflow run)`,
-    resourceBlock,
     '',
-    `<details><summary>Plan preview${truncated ? ' (truncated)' : ''}</summary>`,
+    `<details><summary>Plan output${truncated ? ' (truncated)' : ''}</summary>`,
     '',
-    '```diff',
-    preview,
-    '```',
+    fencePlan(output),
     '',
     '</details>',
   ].join('\n');
