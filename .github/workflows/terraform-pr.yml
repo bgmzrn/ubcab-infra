@@ -70,21 +70,15 @@ jobs:
     needs: [resolve, fmt]
     if: needs.resolve.outputs.has_stacks == 'true'
     runs-on: ubuntu-latest
+    # Same Environment as apply so AWS_ACCESS_KEY_ID resolves per env (dev/staging/prod).
+    environment: ${{ inputs.git_target }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.resolve.outputs.matrix) }}
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_ACCESS_KEY_ID_PROD: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
-      AWS_SECRET_ACCESS_KEY_PROD: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
       AWS_DEFAULT_REGION: ap-southeast-1
-      TFVARS_NETWORK_NONPROD: ${{ secrets.TFVARS_NETWORK_NONPROD }}
-      TFVARS_NETWORK_PROD: ${{ secrets.TFVARS_NETWORK_PROD }}
-      TFVARS_SECURITY_GROUPS_NONPROD: ${{ secrets.TFVARS_SECURITY_GROUPS_NONPROD }}
-      TFVARS_SECURITY_GROUPS_PROD: ${{ secrets.TFVARS_SECURITY_GROUPS_PROD }}
-      TFVARS_TFSTATE_NONPROD: ${{ secrets.TFVARS_TFSTATE_NONPROD }}
-      TFVARS_TFSTATE_PROD: ${{ secrets.TFVARS_TFSTATE_PROD }}
     defaults:
       run:
         working-directory: stacks/${{ matrix.stack }}
@@ -126,9 +120,13 @@ jobs:
         id: plan
         run: |
           set -euo pipefail
+          # shellcheck source=/dev/null
+          source "${GITHUB_WORKSPACE}/.github/scripts/stack-lib.sh"
+          vf=()
+          tf_var_file_args "${{ matrix.tf_env }}" vf
           set +e
           terraform plan -input=false -no-color -detailed-exitcode \
-            -var-file="${{ matrix.tf_env }}.tfvars" \
+            "${vf[@]}" \
             -var="aws_profile=" \
             -out=tfplan \
             2>&1 | tee plan.txt

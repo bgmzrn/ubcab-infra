@@ -1,7 +1,7 @@
 name: Prepare tfvars
 description: >
-  Prefer secret env TFVARS_<STACK>_<TF_ENV> (set by the caller from secrets).
-  Otherwise require stacks/<stack>/<tf_env>.tfvars in the repo.
+  Require committed stacks/<stack>/<tf_env>.tfvars.
+  Optional secrets.tfvars (gitignored) is passed as a second -var-file by callers.
 inputs:
   stack:
     required: true
@@ -10,7 +10,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Ensure tfvars file
+    - name: Ensure base tfvars file
       shell: bash
       env:
         STACK: ${{ inputs.stack }}
@@ -18,15 +18,11 @@ runs:
       run: |
         set -euo pipefail
         dest="stacks/${STACK}/${TF_ENV}.tfvars"
-        key="TFVARS_$(echo "${STACK}_${TF_ENV}" | tr '[:lower:]' '[:upper:]' | tr '-' '_')"
-        content="${!key:-}"
-
-        if [[ -n "${content}" ]]; then
-          printf '%s\n' "$content" > "$dest"
-          echo "Wrote $dest from \$$key"
-        elif [[ -f "$dest" ]]; then
-          echo "Using existing $dest"
-        else
-          echo "::error::Missing $dest and secret/env $key. For personal CI: repo secret $key = full tfvars body (aws_profile=\"\"), or commit the tfvars file."
+        if [[ ! -f "$dest" ]]; then
+          echo "::error::Missing committed $dest. Add stacks/${STACK}/${TF_ENV}.tfvars (aws_profile=\"\") and commit it."
           exit 1
+        fi
+        echo "Using committed $dest"
+        if [[ -f "stacks/${STACK}/secrets.tfvars" ]]; then
+          echo "Found stacks/${STACK}/secrets.tfvars (will be second -var-file; overrides top-level vars)"
         fi

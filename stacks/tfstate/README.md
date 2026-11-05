@@ -22,7 +22,7 @@ Account-scoped envs: **`nonprod` | `prod`**. Not auto-applied by branch CI — u
    ./tf-init.sh tfstate nonprod
    ```
 
-4. Copy `nonprod.tfvars.example` → `nonprod.tfvars`, set `aws_profile` (local) and confirm `bucket_name`.
+4. Confirm committed `nonprod.tfvars` / `prod.tfvars` (`aws_profile = ""` in git; pass `-var=aws_profile=…` locally if needed).
 
 5. Plan / apply:
 
@@ -38,4 +38,4 @@ Account-scoped envs: **`nonprod` | `prod`**. Not auto-applied by branch CI — u
 
 - Path-triggered apply **ignores** this stack (`MANUAL_ONLY_STACKS`)
 - Actions → **tfstate-manual** → choose `nonprod`/`prod` and `plan`/`apply`
-- Provide secret `TFVARS_TFSTATE_NONPROD` (and `_PROD`) or commit the tfvars file
+- Requires committed `nonprod.tfvars` / `prod.tfvars`

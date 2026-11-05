@@ -14,6 +14,7 @@ Depends on the **network** stack VPC (`vpc_id`) and private subnet CIDRs for NAT
 ```bash
 ./tf-init.sh security-groups nonprod
 cd stacks/security-groups && terraform plan -var-file=nonprod.tfvars
+# optional: -var-file=secrets.tfvars (gitignored overlay)
 ```
 
-CI maps `development` → nonprod and `main` → prod. Release-candidate plans nonprod but does **not** apply this stack.
+Commit `nonprod.tfvars` / `prod.tfvars`. CI maps `development` → nonprod and `main` → prod. Release-candidate plans nonprod but does **not** apply this stack.

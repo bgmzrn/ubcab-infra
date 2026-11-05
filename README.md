@@ -59,35 +59,34 @@ Creates an empty bucket only (chicken-and-egg). Harden and manage it with `stack
 Shared S3 backend configs live under [`backends/`](backends/) (one file per AWS account). State key is always `<tf_env>/<stack>/terraform.tfstate`.
 
 ```bash
-cp stacks/network/nonprod.tfvars.example stacks/network/nonprod.tfvars   # fill values; set aws_profile for local
 ./tf-init.sh network nonprod
 cd stacks/network && terraform plan -var-file=nonprod.tfvars
+# optional sensitive overlay (gitignored):
+# terraform plan -var-file=nonprod.tfvars -var-file=secrets.tfvars
 ```
 
-Leave `aws_profile = ""` when using env/`AWS_*` credentials (CI does this via `-var=aws_profile=`).
+Each stack commits `<tf_env>.tfvars` (keep `aws_profile = ""` in git). CI always passes `-var=aws_profile=`. Locally you can override with `-var=aws_profile=myprofile`.
+
+Optional `secrets.tfvars` in a stack directory is a second `-var-file` (later file wins per top-level variable). See [TODO.md](TODO.md) for fetching that file from Vault KV in CI.
 
 ## GitHub Actions (personal repo bootstrap)
 
 Workflows live under [`.github/workflows/`](.github/workflows/). Auth is **dual**:
 
-1. **Personal (now):** repo secrets `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (optional `AWS_ACCESS_KEY_ID_PROD` / `AWS_SECRET_ACCESS_KEY_PROD`)
+1. **Personal (now):** Environment secrets `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (same names in each Environment; different values per AWS account)
 2. **Mezorn (later):** set Actions variable `VAULT_SERVER=ubcab` and remove static keys once Vault JWT + `terraform-infra` AWS roles exist
 
-### Secrets to add
+### Environments + secrets
 
-| Secret | Purpose |
-|--------|---------|
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Nonprod account (dev/staging/nonprod) |
-| `AWS_ACCESS_KEY_ID_PROD` / `AWS_SECRET_ACCESS_KEY_PROD` | Prod account (optional until prod apply) |
-| `TFVARS_NETWORK_NONPROD` | Full body of `stacks/network/nonprod.tfvars` (use `aws_profile = ""`) |
-| `TFVARS_NETWORK_PROD` | Prod network tfvars (when ready) |
-| `TFVARS_SECURITY_GROUPS_NONPROD` | Full body of `stacks/security-groups/nonprod.tfvars` |
-| `TFVARS_SECURITY_GROUPS_PROD` | Prod security-groups tfvars (when ready) |
-| `TFVARS_TFSTATE_NONPROD` / `TFVARS_TFSTATE_PROD` | For manual tfstate workflow |
+Create GitHub Environments `dev`, `staging`, and `prod`. Jobs bind to the Environment matching the git target, so `${{ secrets.AWS_ACCESS_KEY_ID }}` resolves to that Environment’s value.
 
-### Environments
+| Environment | Secret names | Typical AWS account |
+|-------------|--------------|---------------------|
+| `dev` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | nonprod |
+| `staging` | same names | nonprod (same keys as `dev` is fine) |
+| `prod` | same names | prod |
 
-Create GitHub Environments `dev`, `staging`, and `prod`. Put **required reviewers** on `prod` before enabling real prod applies.
+Put **required reviewers** on `prod` before enabling real prod applies. Note: PR plans into `main` also use the `prod` Environment, so reviewers will gate those plans too unless you relax protection.
 
 ### First-time branch setup
 

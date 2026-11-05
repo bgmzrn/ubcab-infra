@@ -1,7 +1,0 @@
-name = "tfstate"
-env  = "nonprod"
-
-aws_region  = "ap-southeast-1"
-aws_profile = ""
-
-bucket_name = "tfstates-606284766767-ap-southeast-1"

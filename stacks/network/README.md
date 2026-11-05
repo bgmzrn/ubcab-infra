@@ -12,6 +12,7 @@ Import **account-scoped** networking. App envs (dev / staging) that share one VP
 ```bash
 ./tf-init.sh network nonprod
 cd stacks/network && terraform plan -var-file=nonprod.tfvars
+# optional: -var-file=secrets.tfvars (gitignored overlay)
 ```
 
-CI maps `development` → nonprod and `main` → prod. Release-candidate plans nonprod but does **not** apply this stack.
+Commit `nonprod.tfvars` / `prod.tfvars`. CI maps `development` → nonprod and `main` → prod. Release-candidate plans nonprod but does **not** apply this stack.

@@ -29,11 +29,7 @@ jobs:
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_ACCESS_KEY_ID_PROD: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
-      AWS_SECRET_ACCESS_KEY_PROD: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
       AWS_DEFAULT_REGION: ap-southeast-1
-      TFVARS_TFSTATE_NONPROD: ${{ secrets.TFVARS_TFSTATE_NONPROD }}
-      TFVARS_TFSTATE_PROD: ${{ secrets.TFVARS_TFSTATE_PROD }}
     defaults:
       run:
         working-directory: stacks/tfstate
@@ -71,13 +67,23 @@ jobs:
       - name: Terraform plan
         if: inputs.action == 'plan'
         run: |
+          set -euo pipefail
+          # shellcheck source=/dev/null
+          source "${GITHUB_WORKSPACE}/.github/scripts/stack-lib.sh"
+          vf=()
+          tf_var_file_args "${{ inputs.tf_env }}" vf
           terraform plan -input=false -no-color \
-            -var-file="${{ inputs.tf_env }}.tfvars" \
+            "${vf[@]}" \
             -var="aws_profile="
 
       - name: Terraform apply
         if: inputs.action == 'apply'
         run: |
+          set -euo pipefail
+          # shellcheck source=/dev/null
+          source "${GITHUB_WORKSPACE}/.github/scripts/stack-lib.sh"
+          vf=()
+          tf_var_file_args "${{ inputs.tf_env }}" vf
           terraform apply -input=false -auto-approve \
-            -var-file="${{ inputs.tf_env }}.tfvars" \
+            "${vf[@]}" \
             -var="aws_profile="

@@ -91,3 +91,20 @@ backend_state_key() {
   local stack="$2"
   echo "${tf_env}/${stack}/terraform.tfstate"
 }
+
+# Append -var-file flags to a nameref array. CWD must be the stack directory.
+# Base <tf_env>.tfvars is required (committed). Optional secrets.tfvars overlays
+# top-level variables only (later file wins; objects/maps are replaced wholesale).
+tf_var_file_args() {
+  local tf_env="$1"
+  local -n _out="$2"
+  local base="${tf_env}.tfvars"
+  if [[ ! -f "$base" ]]; then
+    echo "Missing ${base} (commit it under the stack directory)" >&2
+    return 1
+  fi
+  _out+=(-var-file="$base")
+  if [[ -f secrets.tfvars ]]; then
+    _out+=(-var-file=secrets.tfvars)
+  fi
+}

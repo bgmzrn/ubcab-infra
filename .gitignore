@@ -10,5 +10,5 @@ override.tf.json
 *_override.tf.json
 .DS_Store
 .idea/
-*.tfvars
-!*.tfvars.example
+secrets.tfvars
+**/secrets.tfvars

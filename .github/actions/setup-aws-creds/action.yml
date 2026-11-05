@@ -1,11 +1,12 @@
 name: Setup AWS credentials
 description: >
-  Dual auth for personal vs mezorn. Prefer static AWS_* secrets (personal repo).
-  When vars.VAULT_SERVER is set and AWS secrets are absent, login to Vault via
-  GitHub OIDC and read dynamic AWS creds from VAULT_AWS_PATH.
+  Dual auth for personal vs mezorn. Prefer static AWS_ACCESS_KEY_ID /
+  AWS_SECRET_ACCESS_KEY from the job's GitHub Environment (or repo secrets).
+  When vars.VAULT_SERVER is set, login to Vault via GitHub OIDC and read
+  dynamic AWS creds from VAULT_AWS_PATH (prod vs nonprod path by tf_env).
 inputs:
   tf_env:
-    description: Terraform env (nonprod|dev|staging|prod) — selects prod vs nonprod AWS secrets / vault path
+    description: Terraform env (nonprod|dev|staging|prod) — selects Vault AWS path
     required: true
   vault_server:
     description: Vault server id (ubcab|mezorn|cabpay). Empty = skip Vault.
@@ -29,26 +30,23 @@ runs:
         TF_ENV: ${{ inputs.tf_env }}
         VAULT_SERVER: ${{ inputs.vault_server }}
         AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
-        AWS_ACCESS_KEY_ID_PROD: ${{ env.AWS_ACCESS_KEY_ID_PROD }}
       run: |
         set -euo pipefail
-        is_prod=false
-        [[ "$TF_ENV" == "prod" ]] && is_prod=true
-
-        # Prefer Vault when configured (mezorn). Else static AWS secrets (personal bootstrap).
         if [[ -n "${VAULT_SERVER:-}" ]]; then
           echo "mode=vault" >> "$GITHUB_OUTPUT"
-        elif [[ "$is_prod" == "true" && -n "${AWS_ACCESS_KEY_ID_PROD:-}" ]]; then
-          echo "mode=static_prod" >> "$GITHUB_OUTPUT"
         elif [[ -n "${AWS_ACCESS_KEY_ID:-}" ]]; then
           echo "mode=static" >> "$GITHUB_OUTPUT"
         else
-          echo "::error::No AWS credentials. Set secrets AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (personal), or set VAULT_SERVER for mezorn Vault OIDC."
+          echo "::error::No AWS credentials. Set environment (or repo) secrets AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY, or set VAULT_SERVER for Vault OIDC."
           exit 1
         fi
-        echo "is_prod=$is_prod" >> "$GITHUB_OUTPUT"
+        if [[ "$TF_ENV" == "prod" ]]; then
+          echo "is_prod=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "is_prod=false" >> "$GITHUB_OUTPUT"
+        fi
 
-    - name: Export static AWS credentials (nonprod account)
+    - name: Export static AWS credentials
       if: steps.strategy.outputs.mode == 'static'
       shell: bash
       env:
@@ -61,22 +59,7 @@ runs:
         echo "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID" >> "$GITHUB_ENV"
         echo "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY" >> "$GITHUB_ENV"
         echo "AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-ap-southeast-1}" >> "$GITHUB_ENV"
-        echo "Using static AWS credentials (personal / bootstrap mode)"
-
-    - name: Export static AWS credentials (prod account)
-      if: steps.strategy.outputs.mode == 'static_prod'
-      shell: bash
-      env:
-        AWS_ACCESS_KEY_ID_PROD: ${{ env.AWS_ACCESS_KEY_ID_PROD }}
-        AWS_SECRET_ACCESS_KEY_PROD: ${{ env.AWS_SECRET_ACCESS_KEY_PROD }}
-      run: |
-        set -euo pipefail
-        echo "::add-mask::$AWS_ACCESS_KEY_ID_PROD"
-        echo "::add-mask::$AWS_SECRET_ACCESS_KEY_PROD"
-        echo "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID_PROD" >> "$GITHUB_ENV"
-        echo "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY_PROD" >> "$GITHUB_ENV"
-        echo "AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-ap-southeast-1}" >> "$GITHUB_ENV"
-        echo "Using static AWS prod credentials"
+        echo "Using static AWS credentials from job environment / secrets"
 
     - name: Resolve Vault URL
       if: steps.strategy.outputs.mode == 'vault'
