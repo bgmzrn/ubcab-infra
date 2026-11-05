@@ -10,7 +10,8 @@ Examples: shared S3 buckets, ECR repos, SQS queues, security groups, KMS keys, a
 backends/            # Shared S3 backend configs (nonprod.hcl | prod.hcl)
 stacks/
   tfstate/           # S3 remote-state bucket (account-scoped)
-  network/           # VPC / subnets / shared SGs (account-scoped: nonprod | prod)
+  network/           # VPC / subnets (account-scoped: nonprod | prod)
+  security-groups/   # Shared / platform SGs (account-scoped: nonprod | prod)
   <other>/           # future stacks (stage-scoped: dev | staging | prod)
 tf-init.sh           # Local: ./tf-init.sh <stack> <tf_env>
 ```
@@ -23,7 +24,7 @@ After bootstrap, manage the state bucket with `stacks/tfstate`.
 
 | Scheme | Stacks | TF envs | Notes |
 |--------|--------|---------|--------|
-| **account-scoped** | `network`, `tfstate` | `nonprod`, `prod` | Shared by app `dev` + `staging` in the nonprod account |
+| **account-scoped** | `network`, `security-groups`, `tfstate` | `nonprod`, `prod` | Shared by app `dev` + `staging` in the nonprod account |
 | **stage-scoped** | everything else | `dev`, `staging`, `prod` | Separate state; `dev`/`staging` still use the same AWS account |
 
 Classification is hardcoded in [`.github/scripts/stack-lib.sh`](.github/scripts/stack-lib.sh) (`ACCOUNT_STACKS` / `MANUAL_ONLY_STACKS`).
@@ -80,6 +81,8 @@ Workflows live under [`.github/workflows/`](.github/workflows/). Auth is **dual*
 | `AWS_ACCESS_KEY_ID_PROD` / `AWS_SECRET_ACCESS_KEY_PROD` | Prod account (optional until prod apply) |
 | `TFVARS_NETWORK_NONPROD` | Full body of `stacks/network/nonprod.tfvars` (use `aws_profile = ""`) |
 | `TFVARS_NETWORK_PROD` | Prod network tfvars (when ready) |
+| `TFVARS_SECURITY_GROUPS_NONPROD` | Full body of `stacks/security-groups/nonprod.tfvars` |
+| `TFVARS_SECURITY_GROUPS_PROD` | Prod security-groups tfvars (when ready) |
 | `TFVARS_TFSTATE_NONPROD` / `TFVARS_TFSTATE_PROD` | For manual tfstate workflow |
 
 ### Environments

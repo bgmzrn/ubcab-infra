@@ -74,7 +74,7 @@ jobs:
 
           Promotes \`development\` → \`main\` (prod plan on this PR; apply on merge).
 
-          - Account-scoped stacks (\`network\`): prod plan
+          - Account-scoped stacks (\`network\`, \`security-groups\`): prod plan
           - Stage-scoped stacks: prod plan
 
           After merge, \`apply-prod\` runs (GitHub Environment **prod**).

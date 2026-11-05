@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # Account-scoped: nonprod | prod. Everything else under stacks/ is stage-scoped: dev | staging | prod.
-ACCOUNT_STACKS="${ACCOUNT_STACKS:-network tfstate}"
+ACCOUNT_STACKS="${ACCOUNT_STACKS:-network security-groups tfstate}"
 MANUAL_ONLY_STACKS="${MANUAL_ONLY_STACKS:-tfstate}"
 
 is_account_stack() {
