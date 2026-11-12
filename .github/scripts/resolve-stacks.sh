@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Resolve which stacks to plan/apply and emit a JSON matrix.
+# Resolve which stacks×envs to plan/apply and emit a JSON matrix.
 #
 # Env:
-#   GIT_TARGET          required: dev | staging | prod
 #   MODE                plan | apply (default plan)
 #   FORCE_STACKS        optional space/comma-separated stack names (skip diff)
-#   INCLUDE_MANUAL      true to include MANUAL_ONLY stacks (tfstate)
+#   INCLUDE_MANUAL      true to include manual-only stacks (tfstate, iam)
+#   INCLUDE_GATED       true to include auto_apply=false targets on apply
+#   ONLY_TF_ENV         optional: only this tf_env (account or stage name)
 #   BEFORE_SHA / AFTER_SHA  for push diffs; else BASE_REF for PR diffs
 #   GITHUB_OUTPUT       set by Actions
 set -euo pipefail
@@ -16,7 +17,7 @@ source "${SCRIPT_DIR}/stack-lib.sh"
 
 MODE="${MODE:-plan}"
 INCLUDE_MANUAL="${INCLUDE_MANUAL:-false}"
-GIT_TARGET="${GIT_TARGET:?GIT_TARGET is required (dev|staging|prod)}"
+INCLUDE_GATED="${INCLUDE_GATED:-false}"
 
 collect_changed_stacks() {
   local files=""
@@ -49,10 +50,6 @@ should_include() {
   if is_manual_only_stack "$stack" && [[ "${INCLUDE_MANUAL}" != "true" ]]; then
     return 1
   fi
-  if [[ "${MODE}" == "apply" && "${GIT_TARGET}" == "staging" ]] && is_account_stack "$stack"; then
-    echo "Skipping account-scoped stack '${stack}' on staging apply" >&2
-    return 1
-  fi
   if [[ ! -d "stacks/${stack}" ]]; then
     return 1
   fi
@@ -68,18 +65,14 @@ while IFS= read -r stack; do
   if ! should_include "$stack"; then
     continue
   fi
-  tf_env="$(map_tf_env "$stack" "$GIT_TARGET")"
-  if is_account_stack "$stack"; then
-    scheme="account"
-  else
-    scheme="stage"
-  fi
-  matrix_items+=("$(jq -nc --arg s "$stack" --arg e "$tf_env" --arg sc "$scheme" \
-    '{stack:$s, tf_env:$e, scheme:$sc}')")
+  while IFS= read -r row; do
+    [[ -z "$row" ]] && continue
+    matrix_items+=("$row")
+  done < <(matrix_rows_for_stack "$stack")
 done <<< "$stacks"
 
 if [[ ${#matrix_items[@]} -eq 0 ]]; then
-  echo "No stacks to ${MODE} for git_target=${GIT_TARGET}"
+  echo "No stacks to ${MODE}"
   echo 'matrix={"include":[]}' >> "${GITHUB_OUTPUT}"
   echo "has_stacks=false" >> "${GITHUB_OUTPUT}"
   exit 0

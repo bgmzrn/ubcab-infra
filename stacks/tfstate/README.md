@@ -2,7 +2,7 @@
 
 Owns the account-scoped S3 bucket that stores remote Terraform state.
 
-Account-scoped envs: **`nonprod` | `prod`**. Not auto-applied by branch CI — use workflow **tfstate-manual** (or local CLI).
+Account-scoped envs: **`nonprod` | `prod`** (see [`environments.yaml`](../../environments.yaml)). Marked `manual: true` — not auto-applied by path CI; use workflow **tfstate-manual** (or local CLI).
 
 ## Bootstrap → Terraform
 
@@ -36,6 +36,6 @@ Account-scoped envs: **`nonprod` | `prod`**. Not auto-applied by branch CI — u
 
 ## CI
 
-- Path-triggered apply **ignores** this stack (`MANUAL_ONLY_STACKS`)
+- Path-triggered apply **ignores** this stack (`stacks.tfstate.manual: true` in `environments.yaml`)
 - Actions → **tfstate-manual** → choose `nonprod`/`prod` and `plan`/`apply`
-- Requires committed `nonprod.tfvars` / `prod.tfvars`
+- Or **apply** workflow_dispatch with `include_manual` + `include_gated` as needed (prod tags do not include manual stacks)

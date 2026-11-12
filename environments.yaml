@@ -1,0 +1,55 @@
+# Single source of truth for AWS accounts, stages, and stack scope.
+# CI (resolve-stacks / stack-lib) reads this file — add/remove envs here.
+#
+# Accounts = real AWS accounts (shared backend + OIDC role).
+# Stages   = logical envs (dev/staging share nonprod; prod is alone).
+# Stacks   = account-scoped (once per account) or stage-scoped (once per stage).
+#
+# Apply policy (trunk-based on main):
+#   auto_apply: true  → apply on merge to main.
+#   auto_apply: false → skipped on merge; apply via prod-v* tag (preferred)
+#                       or apply workflow_dispatch with include_gated.
+#                       Manual stacks (tfstate/iam): include_manual.
+
+accounts:
+  nonprod:
+    aws_account_id: "606284766767"
+    backend: backends/nonprod.hcl
+    # IAM role assumed by GitHub Actions via OIDC (stacks/iam).
+    github_actions_role_name: gha-tf-shared
+    # GitHub Environment used for approvals when running account-scoped stacks.
+    github_environment: dev
+    auto_apply: true
+  prod:
+    aws_account_id: "788430726908"
+    backend: backends/prod.hcl
+    github_actions_role_name: gha-tf-shared
+    github_environment: prod
+    # Gated: git tag prod-v* (or apply dispatch with include_gated).
+    auto_apply: false
+
+stages:
+  - name: dev
+    account: nonprod
+    github_environment: dev
+    auto_apply: true
+  - name: staging
+    account: nonprod
+    github_environment: staging
+    auto_apply: true
+  - name: prod
+    account: prod
+    github_environment: prod
+    auto_apply: false
+
+stacks:
+  network:
+    scope: account
+  security-groups:
+    scope: account
+  iam:
+    scope: account
+    manual: true
+  tfstate:
+    scope: account
+    manual: true

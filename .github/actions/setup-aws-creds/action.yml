@@ -1,124 +1,24 @@
 name: Setup AWS credentials
 description: >
-  Dual auth for personal vs mezorn. Prefer static AWS_ACCESS_KEY_ID /
-  AWS_SECRET_ACCESS_KEY from the job's GitHub Environment (or repo secrets).
-  When vars.VAULT_SERVER is set, login to Vault via GitHub OIDC and read
-  dynamic AWS creds from VAULT_AWS_PATH (prod vs nonprod path by tf_env).
+  Assume the per-account IAM role via GitHub Actions OIDC
+  (aws-actions/configure-aws-credentials). No static keys or Vault.
 inputs:
-  tf_env:
-    description: Terraform env (nonprod|dev|staging|prod) — selects Vault AWS path
+  role_arn:
+    description: >
+      IAM role ARN to assume (from environments.yaml / matrix).
+      Typically arn:aws:iam::<account_id>:role/gha-tf-shared.
     required: true
-  vault_server:
-    description: Vault server id (ubcab|mezorn|cabpay). Empty = skip Vault.
+  region:
+    description: AWS region
     required: false
-    default: ""
-  vault_aws_path_nonprod:
-    description: Vault AWS secret path for nonprod/dev/staging
-    required: false
-    default: "aws-ubcab-dev/creds/terraform-infra"
-  vault_aws_path_prod:
-    description: Vault AWS secret path for prod
-    required: false
-    default: "aws-ubcab/creds/terraform-infra"
+    default: ap-southeast-1
 runs:
   using: composite
   steps:
-    - name: Resolve credential strategy
-      id: strategy
-      shell: bash
-      env:
-        VAULT_SERVER: ${{ inputs.vault_server }}
-        AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
-      run: |
-        set -euo pipefail
-        if [[ -n "${VAULT_SERVER:-}" ]]; then
-          echo "mode=vault" >> "$GITHUB_OUTPUT"
-        elif [[ -n "${AWS_ACCESS_KEY_ID:-}" ]]; then
-          echo "mode=static" >> "$GITHUB_OUTPUT"
-        else
-          echo "::error::No AWS credentials. Set environment (or repo) secrets AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY, or set VAULT_SERVER for Vault OIDC."
-          exit 1
-        fi
-
-    - name: Export static AWS credentials
-      if: steps.strategy.outputs.mode == 'static'
-      shell: bash
-      env:
-        AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}
-      run: |
-        set -euo pipefail
-        echo "::add-mask::$AWS_ACCESS_KEY_ID"
-        echo "::add-mask::$AWS_SECRET_ACCESS_KEY"
-        echo "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID" >> "$GITHUB_ENV"
-        echo "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY" >> "$GITHUB_ENV"
-        echo "AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-ap-southeast-1}" >> "$GITHUB_ENV"
-        echo "Using static AWS credentials from job environment / secrets"
-
-    - name: Resolve Vault URL
-      if: steps.strategy.outputs.mode == 'vault'
-      id: vault_url
-      shell: bash
-      env:
-        VAULT_SERVER: ${{ inputs.vault_server }}
-      run: |
-        set -euo pipefail
-        case "$VAULT_SERVER" in
-          mezorn) url="https://mezorn-vault.mzn.mn/" ;;
-          ubcab)  url="https://vault.v4.ubcabtech.com/" ;;
-          cabpay) url="https://cabpay-vault.mezorn.com/" ;;
-          *)
-            echo "Unknown VAULT_SERVER: $VAULT_SERVER"
-            exit 1
-            ;;
-        esac
-        echo "url=$url" >> "$GITHUB_OUTPUT"
-
-    - name: Vault login (GitHub OIDC)
-      if: steps.strategy.outputs.mode == 'vault'
-      uses: hashicorp/vault-action@v4.0.0
+    - name: Configure AWS credentials (OIDC)
+      uses: aws-actions/configure-aws-credentials@v4
       with:
-        url: ${{ steps.vault_url.outputs.url }}
-        method: jwt
-        path: github-actions
-        role: ${{ github.event.repository.name }}
-        jwtGithubAudience: https://github.com/mezorn-com
-        exportToken: true
-        tlsSkipVerify: true
-
-    - name: Read AWS creds from Vault
-      if: steps.strategy.outputs.mode == 'vault'
-      shell: bash
-      env:
-        TF_ENV: ${{ inputs.tf_env }}
-        VAULT_AWS_PATH_NONPROD: ${{ inputs.vault_aws_path_nonprod }}
-        VAULT_AWS_PATH_PROD: ${{ inputs.vault_aws_path_prod }}
-      run: |
-        set -euo pipefail
-        if [[ "$TF_ENV" == "prod" ]]; then
-          path="$VAULT_AWS_PATH_PROD"
-        else
-          path="$VAULT_AWS_PATH_NONPROD"
-        fi
-        echo "Reading Vault AWS path: $path"
-        if ! command -v vault >/dev/null 2>&1; then
-          curl -fsSL https://releases.hashicorp.com/vault/1.17.6/vault_1.17.6_linux_amd64.zip -o /tmp/vault.zip
-          sudo unzip -o /tmp/vault.zip -d /usr/local/bin vault
-        fi
-        json="$(vault read -format=json "$path")"
-        access_key="$(echo "$json" | jq -r '.data.access_key // .data.access_key_id')"
-        secret_key="$(echo "$json" | jq -r '.data.secret_key // .data.secret_access_key')"
-        security_token="$(echo "$json" | jq -r '.data.security_token // .data.session_token // empty')"
-        if [[ -z "$access_key" || "$access_key" == "null" ]]; then
-          echo "::error::Vault path $path did not return access_key. Provision terraform-infra AWS roles first."
-          exit 1
-        fi
-        echo "::add-mask::$access_key"
-        echo "::add-mask::$secret_key"
-        echo "AWS_ACCESS_KEY_ID=$access_key" >> "$GITHUB_ENV"
-        echo "AWS_SECRET_ACCESS_KEY=$secret_key" >> "$GITHUB_ENV"
-        if [[ -n "$security_token" && "$security_token" != "null" ]]; then
-          echo "::add-mask::$security_token"
-          echo "AWS_SESSION_TOKEN=$security_token" >> "$GITHUB_ENV"
-        fi
-        echo "AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-ap-southeast-1}" >> "$GITHUB_ENV"
+        role-to-assume: ${{ inputs.role_arn }}
+        aws-region: ${{ inputs.region }}
+        # Match stacks/iam github_actions_oidc.tf audience.
+        audience: sts.amazonaws.com

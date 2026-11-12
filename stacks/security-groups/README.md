@@ -4,11 +4,13 @@ Import **account-scoped** shared / platform security groups. App envs (dev / sta
 
 Depends on the **network** stack VPC (`vpc_id`) and private subnet CIDRs for NAT / PostgreSQL rules.
 
+Scope is declared in [`environments.yaml`](../../environments.yaml) (`stacks.security-groups.scope: account`).
+
 ## Envs
 
-| TF env | Backend account | State key | AWS account |
-|--------|-----------------|-----------|-------------|
-| `nonprod` | `backends/nonprod.hcl` | `nonprod/security-groups/terraform.tfstate` | nonprod (shared) |
+| TF env | Backend | State key | AWS account |
+|--------|---------|-----------|-------------|
+| `nonprod` | `backends/nonprod.hcl` | `nonprod/security-groups/terraform.tfstate` | nonprod (shared by dev+staging) |
 | `prod` | `backends/prod.hcl` | `prod/security-groups/terraform.tfstate` | prod |
 
 ```bash
@@ -17,4 +19,4 @@ cd stacks/security-groups && terraform plan -var-file=nonprod.tfvars
 # optional: -var-file=secrets.tfvars (gitignored overlay)
 ```
 
-Commit `nonprod.tfvars` / `prod.tfvars`. CI maps `development` → nonprod and `main` → prod. Release-candidate plans nonprod but does **not** apply this stack.
+Commit `nonprod.tfvars` / `prod.tfvars`. CI plans/applies from path diffs on `main` using the env registry (skips missing tfvars).

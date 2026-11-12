@@ -24,11 +24,12 @@ usage() {
 cmd_init() {
   local tf_env="$1"
   local stack="$2"
-  local account key
+  local account key backend_rel
   account="$(backend_account_for_tf_env "$tf_env")"
   key="$(backend_state_key "$tf_env" "$stack")"
+  backend_rel="$(backend_config_for_account "$account")"
   terraform init -input=false \
-    -backend-config="${ROOT}/backends/${account}.hcl" \
+    -backend-config="${ROOT}/${backend_rel}" \
     -backend-config="key=${key}"
 }
 

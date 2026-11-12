@@ -3,14 +3,6 @@ name: terraform-apply
 on:
   workflow_call:
     inputs:
-      git_target:
-        description: "dev | staging | prod"
-        required: true
-        type: string
-      github_environment:
-        description: "GitHub Environment name (dev|staging|prod)"
-        required: true
-        type: string
       force_stacks:
         required: false
         type: string
@@ -19,6 +11,16 @@ on:
         required: false
         type: boolean
         default: false
+      include_gated:
+        description: "Include auto_apply=false targets (prod)"
+        required: false
+        type: boolean
+        default: false
+      only_tf_env:
+        description: "Optional: only this tf_env (account or stage name)"
+        required: false
+        type: string
+        default: ""
       terraform_version:
         required: false
         type: string
@@ -63,10 +65,11 @@ jobs:
         id: resolve
         if: steps.skip.outputs.skip_apply != 'true'
         env:
-          GIT_TARGET: ${{ inputs.git_target }}
           MODE: apply
           FORCE_STACKS: ${{ inputs.force_stacks }}
           INCLUDE_MANUAL: ${{ inputs.include_manual }}
+          INCLUDE_GATED: ${{ inputs.include_gated }}
+          ONLY_TF_ENV: ${{ inputs.only_tf_env }}
           BEFORE_SHA: ${{ inputs.before_sha }}
           AFTER_SHA: ${{ inputs.after_sha }}
         run: |
@@ -92,7 +95,7 @@ jobs:
     needs: resolve
     if: needs.resolve.outputs.skip_apply != 'true' && needs.resolve.outputs.has_stacks == 'true'
     runs-on: ubuntu-24.04
-    environment: ${{ inputs.github_environment }}
+    environment: ${{ matrix.github_environment }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.resolve.outputs.matrix) }}
@@ -100,8 +103,6 @@ jobs:
       group: infra-${{ matrix.tf_env }}-${{ matrix.stack }}
       cancel-in-progress: false
     env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: ap-southeast-1
     defaults:
       run:
@@ -112,8 +113,8 @@ jobs:
       - name: Setup AWS credentials
         uses: ./.github/actions/setup-aws-creds
         with:
-          tf_env: ${{ matrix.tf_env }}
-          vault_server: ${{ vars.VAULT_SERVER }}
+          role_arn: ${{ matrix.aws_role_arn }}
+
 
       - name: Prepare tfvars
         uses: ./.github/actions/prepare-tfvars

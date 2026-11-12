@@ -31,7 +31,8 @@ fi
 
 account="$(backend_account_for_tf_env "$tf_env")"
 key="$(backend_state_key "$tf_env" "$stack")"
-backend_file="${ROOT}/backends/${account}.hcl"
+backend_rel="$(backend_config_for_account "$account")"
+backend_file="${ROOT}/${backend_rel}"
 
 if [[ ! -f "$backend_file" ]]; then
   echo "Backend config not found: $backend_file" >&2

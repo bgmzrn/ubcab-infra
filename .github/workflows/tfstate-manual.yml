@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tf_env:
-        description: "nonprod | prod"
+        description: "Account-scoped tf_env (from environments.yaml accounts)"
         required: true
         type: choice
         options:
@@ -23,12 +23,29 @@ permissions:
   id-token: write
 
 jobs:
-  tfstate:
+  resolve-env:
     runs-on: ubuntu-24.04
-    environment: ${{ inputs.tf_env == 'prod' && 'prod' || 'dev' }}
+    outputs:
+      github_environment: ${{ steps.cfg.outputs.github_environment }}
+      aws_role_arn: ${{ steps.cfg.outputs.aws_role_arn }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: cfg
+        env:
+          TF_ENV: ${{ inputs.tf_env }}
+        run: |
+          set -euo pipefail
+          chmod +x .github/scripts/*.sh
+          # shellcheck source=/dev/null
+          source .github/scripts/stack-lib.sh
+          echo "github_environment=$(github_environment_for_account "$TF_ENV")" >> "$GITHUB_OUTPUT"
+          echo "aws_role_arn=$(github_actions_role_arn_for_account "$TF_ENV")" >> "$GITHUB_OUTPUT"
+
+  tfstate:
+    needs: resolve-env
+    runs-on: ubuntu-24.04
+    environment: ${{ needs.resolve-env.outputs.github_environment }}
     env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: ap-southeast-1
     defaults:
       run:
@@ -39,8 +56,7 @@ jobs:
       - name: Setup AWS credentials
         uses: ./.github/actions/setup-aws-creds
         with:
-          tf_env: ${{ inputs.tf_env }}
-          vault_server: ${{ vars.VAULT_SERVER }}
+          role_arn: ${{ needs.resolve-env.outputs.aws_role_arn }}
 
       - name: Prepare tfvars
         uses: ./.github/actions/prepare-tfvars
