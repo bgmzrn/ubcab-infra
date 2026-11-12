@@ -14,9 +14,8 @@ Scope is declared in [`environments.yaml`](../../environments.yaml) (`stacks.sec
 | `prod` | `backends/prod.hcl` | `prod/security-groups/terraform.tfstate` | prod |
 
 ```bash
-./tf-init.sh security-groups nonprod
+bash .github/scripts/ci-terraform.sh init nonprod security-groups
 cd stacks/security-groups && terraform plan -var-file=nonprod.tfvars
-# optional: -var-file=secrets.tfvars (gitignored overlay)
 ```
 
 Commit `nonprod.tfvars` / `prod.tfvars`. CI plans/applies from path diffs on `main` using the env registry (skips missing tfvars).

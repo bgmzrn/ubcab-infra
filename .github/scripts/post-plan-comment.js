@@ -1,20 +1,15 @@
 /**
  * Post or update a PR comment summarizing a Terraform plan.
- * Intended for actions/github-script: require this module and call with { github, context }.
- *
- * Env: PLAN_EXIT, STACK, TF_ENV, SCHEME, RUN_URL, ARTIFACT_NAME
- * Optional: GITHUB_WORKSPACE (default cwd root for plan.txt path)
+ * Env: PLAN_EXIT, STACK, TF_ENV, RUN_URL, ARTIFACT_NAME
  */
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
 
-// GitHub issue/PR comment body max is 65536; leave room for the markdown wrapper.
 const PLAN_MAX = 60000;
 
 function fencePlan(plan) {
-  // Avoid closing the markdown fence early if the plan contains ```.
   const longest = (plan.match(/`+/g) || []).reduce((n, s) => Math.max(n, s.length), 0);
   const ticks = '`'.repeat(Math.max(3, longest + 1));
   return `${ticks}\n${plan}\n${ticks}`;
@@ -51,7 +46,6 @@ function buildCommentBody(plan, env) {
     marker,
     `### Terraform plan \`${env.STACK}\` (\`${env.TF_ENV}\`)`,
     '',
-    `- Scheme: **${env.SCHEME}**`,
     `- Result: **${status}**`,
     `- ${planSummary}`,
     `- Full plan: [\`${env.ARTIFACT_NAME}\`](${env.RUN_URL}) (Artifacts on the workflow run)`,
@@ -66,6 +60,26 @@ function buildCommentBody(plan, env) {
   return { marker, body };
 }
 
+async function findPlanComment(github, context, marker) {
+  const iterator = github.paginate.iterator(github.rest.issues.listComments, {
+    owner: context.repo.owner,
+    repo: context.repo.repo,
+    issue_number: context.issue.number,
+    per_page: 100,
+  });
+  for await (const { data: comments } of iterator) {
+    const hit = comments.find(
+      (c) =>
+        c.user &&
+        c.user.login === 'github-actions[bot]' &&
+        c.body &&
+        c.body.includes(marker)
+    );
+    if (hit) return hit;
+  }
+  return null;
+}
+
 async function postPlanComment({ github, context }) {
   const root = process.env.GITHUB_WORKSPACE || process.cwd();
   const planPath = path.join(root, 'stacks', process.env.STACK, 'plan.txt');
@@ -74,13 +88,8 @@ async function postPlanComment({ github, context }) {
     : '(no plan output)';
 
   const { marker, body } = buildCommentBody(plan, process.env);
+  const existing = await findPlanComment(github, context, marker);
 
-  const { data: comments } = await github.rest.issues.listComments({
-    owner: context.repo.owner,
-    repo: context.repo.repo,
-    issue_number: context.issue.number,
-  });
-  const existing = comments.find((c) => c.body && c.body.includes(marker));
   if (existing) {
     await github.rest.issues.updateComment({
       owner: context.repo.owner,
@@ -99,4 +108,3 @@ async function postPlanComment({ github, context }) {
 }
 
 module.exports = postPlanComment;
-module.exports.buildCommentBody = buildCommentBody;

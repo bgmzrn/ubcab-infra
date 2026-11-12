@@ -1,20 +1,18 @@
 #!/usr/bin/env bash
 # Shared Terraform CI helpers. CWD must be the stack directory (stacks/<stack>).
 # Usage:
-#   ci-terraform.sh init  <tf_env> <stack>
+#   ci-terraform.sh init  <tf_env> <stack> [--] [extra terraform init args...]
 #   ci-terraform.sh plan  <tf_env> [--detailed-exitcode] [--out FILE] [--tee FILE]
 #   ci-terraform.sh apply <tf_env> [--plan FILE]
 #   ci-terraform.sh validate
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=stack-lib.sh
 source "${SCRIPT_DIR}/stack-lib.sh"
-
-ROOT="${GITHUB_WORKSPACE:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
+# ROOT set by stack-lib.sh
 
 usage() {
-  echo "Usage: $0 init <tf_env> <stack>" >&2
+  echo "Usage: $0 init <tf_env> <stack> [--] [extra terraform init args...]" >&2
   echo "       $0 plan <tf_env> [--detailed-exitcode] [--out FILE] [--tee FILE]" >&2
   echo "       $0 apply <tf_env> [--plan FILE]" >&2
   echo "       $0 validate" >&2
@@ -24,13 +22,28 @@ usage() {
 cmd_init() {
   local tf_env="$1"
   local stack="$2"
-  local account key backend_rel
+  shift 2
+  local account key backend_rel backend_file stack_dir
   account="$(backend_account_for_tf_env "$tf_env")"
   key="$(backend_state_key "$tf_env" "$stack")"
   backend_rel="$(backend_config_for_account "$account")"
+  backend_file="${ROOT}/${backend_rel}"
+  stack_dir="${ROOT}/stacks/${stack}"
+
+  if [[ ! -d "$stack_dir" ]]; then
+    echo "Stack directory not found: $stack_dir" >&2
+    exit 1
+  fi
+  if [[ ! -f "$backend_file" ]]; then
+    echo "Backend config not found: $backend_file" >&2
+    exit 1
+  fi
+
+  cd "$stack_dir"
   terraform init -input=false \
-    -backend-config="${ROOT}/${backend_rel}" \
-    -backend-config="key=${key}"
+    -backend-config="$backend_file" \
+    -backend-config="key=${key}" \
+    "$@"
 }
 
 cmd_plan() {
@@ -139,8 +152,11 @@ shift
 
 case "$command" in
   init)
-    [[ $# -eq 2 ]] || usage
-    cmd_init "$1" "$2"
+    [[ $# -ge 2 ]] || usage
+    if [[ "${3:-}" == "--" ]]; then
+      set -- "$1" "$2" "${@:4}"
+    fi
+    cmd_init "$@"
     ;;
   plan)
     [[ $# -ge 1 ]] || usage

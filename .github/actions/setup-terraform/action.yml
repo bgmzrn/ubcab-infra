@@ -1,0 +1,30 @@
+name: Setup Terraform
+description: >
+  Install Terraform from the repo-root .terraform-version pin
+  (hashicorp/setup-terraform, wrapper disabled for raw CLI exit codes).
+runs:
+  using: composite
+  steps:
+    - name: Read .terraform-version
+      id: ver
+      shell: bash
+      run: |
+        set -euo pipefail
+        file="${GITHUB_WORKSPACE}/.terraform-version"
+        if [[ ! -f "$file" ]]; then
+          echo "::error::Missing $file"
+          exit 1
+        fi
+        version="$(tr -d '[:space:]' < "$file")"
+        if [[ -z "$version" ]]; then
+          echo "::error::Empty $file"
+          exit 1
+        fi
+        echo "version=${version}" >> "$GITHUB_OUTPUT"
+        echo "Using Terraform ${version}"
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v4
+      with:
+        terraform_version: ${{ steps.ver.outputs.version }}
+        terraform_wrapper: false

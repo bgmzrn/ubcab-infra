@@ -1,80 +1,93 @@
 #!/usr/bin/env bash
-# Resolve which stacks×envs to plan/apply and emit a JSON matrix.
+# Resolve stacks×envs → JSON matrix for Actions.
 #
 # Env:
-#   MODE                plan | apply (default plan)
-#   FORCE_STACKS        optional space/comma-separated stack names (skip diff)
-#   INCLUDE_MANUAL      true to include manual-only stacks (tfstate, iam)
-#   INCLUDE_GATED       true to include auto_apply=false targets on apply
-#   ONLY_TF_ENV         optional: only this tf_env (account or stage name)
-#   BEFORE_SHA / AFTER_SHA  for push diffs; else BASE_REF for PR diffs
-#   GITHUB_OUTPUT       set by Actions
+#   TARGET              nonprod | prod
+#   BASE_REF            PR base branch (triple-dot diff)
+#   BEFORE_SHA/AFTER_SHA  merge push / tag diff
+#   ALL_STACKS=true     every stack (e.g. first prod-v* tag)
+#   GITHUB_OUTPUT
+#
+# Outputs: matrix, has_stacks
+
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=stack-lib.sh
 source "${SCRIPT_DIR}/stack-lib.sh"
 
-MODE="${MODE:-plan}"
-INCLUDE_MANUAL="${INCLUDE_MANUAL:-false}"
-INCLUDE_GATED="${INCLUDE_GATED:-false}"
+TARGET="${TARGET:-nonprod}"
+CHANGED_STACKS=()
+
+set_stacks() {
+  local sorted line
+  if [[ $# -eq 0 ]]; then
+    CHANGED_STACKS=()
+    return 0
+  fi
+  sorted="$(printf '%s\n' "$@" | grep -v '^$' | sort -u || true)"
+  CHANGED_STACKS=()
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -n "$line" ]] && CHANGED_STACKS+=("$line")
+  done <<< "$sorted"
+}
+
+# Read newline-separated names from a command into CHANGED_STACKS.
+set_stacks_from() {
+  local -a lines=()
+  mapfile -t lines < <("$@")
+  set_stacks "${lines[@]}"
+}
 
 collect_changed_stacks() {
   local files=""
-  if [[ -n "${FORCE_STACKS:-}" ]]; then
-    # shellcheck disable=SC2086
-    for s in $(echo "${FORCE_STACKS}" | tr ',:' ' '); do
-      [[ -n "$s" ]] && echo "$s"
-    done | sort -u
+  local -a lines=()
+
+  if [[ "${ALL_STACKS:-false}" == "true" ]]; then
+    set_stacks_from list_all_stacks stacks
     return 0
   fi
 
   if [[ -n "${BEFORE_SHA:-}" && -n "${AFTER_SHA:-}" && "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ]]; then
     files="$(git diff --name-only "${BEFORE_SHA}" "${AFTER_SHA}" || true)"
   elif [[ -n "${BASE_REF:-}" ]]; then
-    git fetch origin "${BASE_REF}" --depth=1 2>/dev/null || true
+    git fetch origin "${BASE_REF}" 2>/dev/null || true
     files="$(git diff --name-only "origin/${BASE_REF}...HEAD" || git diff --name-only "origin/${BASE_REF}" HEAD || true)"
   else
-    # workflow_dispatch / fallback: all non-manual stacks
-    list_all_stacks stacks
+    echo "No diff refs — selecting all stacks" >&2
+    set_stacks_from list_all_stacks stacks
     return 0
   fi
 
-  echo "$files" \
-    | awk -F/ '$1=="stacks" && NF>=2 { print $2 }' \
-    | sort -u
+  if printf '%s\n' "$files" | grep -qE '^(backends/|environments\.yaml$|constants\.tf$|modules/|\.github/(scripts|actions|workflows)/)'; then
+    echo "Shared-path change detected — selecting all stacks" >&2
+    set_stacks_from list_all_stacks stacks
+    return 0
+  fi
+
+  mapfile -t lines < <(
+    printf '%s\n' "$files" \
+      | awk -F/ '$1=="stacks" && NF>=2 { print $2 }' \
+      | sort -u
+  )
+  set_stacks "${lines[@]}"
 }
 
-should_include() {
-  local stack="$1"
-  if is_manual_only_stack "$stack" && [[ "${INCLUDE_MANUAL}" != "true" ]]; then
-    return 1
-  fi
-  if [[ ! -d "stacks/${stack}" ]]; then
-    return 1
-  fi
-  return 0
-}
-
-stacks="$(collect_changed_stacks | tr ' ' '\n' | sed '/^$/d' | sort -u || true)"
+collect_changed_stacks
 
 matrix_items=()
-
-while IFS= read -r stack; do
-  [[ -z "$stack" ]] && continue
-  if ! should_include "$stack"; then
-    continue
-  fi
+for stack in "${CHANGED_STACKS[@]+"${CHANGED_STACKS[@]}"}"; do
+  [[ -z "$stack" || ! -d "stacks/${stack}" ]] && continue
   while IFS= read -r row; do
-    [[ -z "$row" ]] && continue
-    matrix_items+=("$row")
+    [[ -n "$row" ]] && matrix_items+=("$row")
   done < <(matrix_rows_for_stack "$stack")
-done <<< "$stacks"
+done
 
 if [[ ${#matrix_items[@]} -eq 0 ]]; then
-  echo "No stacks to ${MODE}"
-  echo 'matrix={"include":[]}' >> "${GITHUB_OUTPUT}"
-  echo "has_stacks=false" >> "${GITHUB_OUTPUT}"
+  echo "No stacks for TARGET=${TARGET}"
+  {
+    echo 'matrix={"include":[]}'
+    echo "has_stacks=false"
+  } >> "${GITHUB_OUTPUT}"
   exit 0
 fi
 

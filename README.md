@@ -1,4 +1,4 @@
-# ubcabv4-infra
+# ubcabv4-shared-infra
 
 **Shared / core AWS resources** for UBCab v4 — account-level and cross-service infra that is **not** owned by a single app repo’s Serverless stack.
 
@@ -15,7 +15,7 @@ stacks/
   network/           # VPC / subnets (account-scoped)
   security-groups/   # Shared / platform SGs (account-scoped)
   <other>/           # future stacks (stage-scoped: dev | staging | prod)
-tf-init.sh           # Local: ./tf-init.sh <stack> <tf_env>
+.github/scripts/ci-terraform.sh  # Local/CI: init | plan | apply | validate
 ```
 
 Each stack is a small Terraform root (own state) so blast radius stays limited.
@@ -36,33 +36,31 @@ Configured in [`environments.yaml`](environments.yaml):
 | **account-scoped** | `network`, `security-groups`, `iam`, `tfstate` | `nonprod`, `prod` | Shared by app `dev` + `staging` in nonprod |
 | **stage-scoped** | everything else (default) | `dev`, `staging`, `prod` | Separate state; still uses the stage’s account backend |
 
-Add/remove an environment by editing `environments.yaml`, then adding `backends/<account>.hcl` and `stacks/<stack>/<tf_env>.tfvars` as needed. CI reads the registry — no workflow edits for the common case.
+Add/remove an environment by editing `environments.yaml`, then adding `backends/<account>.hcl` and `stacks/<stack>/<tf_env>.tfvars` as needed. Non-prod vs prod CI targets are hard-coded in `stack-lib.sh` (`TARGET=nonprod|prod`).
 
-## CI (trunk-based)
+## CI
 
 ```
 feature/*  →  PR to main (plan)  →  merge to main (apply)
-                                      ├─ nonprod / dev / staging  → apply immediately
-                                      └─ prod                     → tag prod-v* → plan → approve → apply
+                                      ├─ nonprod + dev  → apply first
+                                      ├─ staging        → apply only if previous succeeded
+                                      └─ prod           → tag prod-v* → plan → approve → apply
 ```
 
 | Event | Workflow | Behavior |
 |-------|----------|----------|
-| PR → `main` | [`ci.yml`](.github/workflows/ci.yml) | `fmt` + plan all changed stacks × applicable tf_envs (incl. prod when tfvars exist) |
-| Push → `main` | [`apply.yml`](.github/workflows/apply.yml) | Apply `auto_apply: true` (nonprod, dev, staging). Prod skipped. |
-| Tag `prod-v*` | [`apply.yml`](.github/workflows/apply.yml) | Plan all prod stacks at that SHA, wait for GitHub Environment `prod` approval, apply saved plans. |
-| Manual | `apply.yml` dispatch | Same gated flow with `include_gated`, or `include_manual` / `force_stacks`. |
-| Manual | `tfstate-manual` | Plan/apply `tfstate` for `nonprod` \| `prod` |
+| PR → `main` | [`pr.yml`](.github/workflows/pr.yml) | `fmt` + plan **nonprod / dev / staging** in parallel (same matrix) |
+| Push → `main` | [`apply-main.yml`](.github/workflows/apply-main.yml) | Same resolve matrix, then split waves: apply **nonprod + dev**, then **staging** only if the first wave succeeded |
+| Tag `prod-v*` | [`apply-prod.yml`](.github/workflows/apply-prod.yml) | Plan/apply **changed** stacks × **prod** (diff vs previous `prod-v*` tag); first tag → all stacks |
+| Shared-path change (e.g. `environments.yaml`, `backends/`, `constants.tf`, `.github/…`) | PR / apply-main / apply-prod | Selects **all** stacks for that target |
 
 Example: `git tag prod-v1.0.0 <sha> && git push origin prod-v1.0.0` (or create the tag from the GitHub Releases UI). Then open the Actions run, review the plan job summary/artifacts, and approve the `prod` Environment gate.
 
-Commit message `#skip-apply` skips apply on push to `main` (not used for tags).
-
-Missing `<tf_env>.tfvars` for a stack/env is skipped (logged), so prod account stacks stay out of the matrix until you commit `prod.tfvars`.
+Missing `<tf_env>.tfvars` for a stack/env is skipped (logged).
 
 ## Prerequisites
 
-- Terraform `>= 1.5` (`import` blocks)
+- Terraform `>= 1.17.1` (pin in [`.terraform-version`](.terraform-version); CI via [`.github/actions/setup-terraform`](.github/actions/setup-terraform/action.yml))
 - Region: `ap-southeast-1`
 - Local helpers need `ruby` + `jq` (to parse `environments.yaml`)
 
@@ -87,23 +85,23 @@ Creates the GitHub OIDC provider + IAM role `gha-tf-shared` (`AdministratorAcces
 ## Local Terraform
 
 ```bash
-./tf-init.sh network nonprod
+bash .github/scripts/ci-terraform.sh init nonprod network
 cd stacks/network && terraform plan -var-file=nonprod.tfvars
-# optional sensitive overlay (gitignored):
-# terraform plan -var-file=nonprod.tfvars -var-file=secrets.tfvars
 ```
 
 Each stack commits `<tf_env>.tfvars` (keep `aws_profile = ""` in git). CI always passes `-var=aws_profile=`. Locally you can override with `-var=aws_profile=myprofile`.
-
-Optional `secrets.tfvars` in a stack directory is a second `-var-file` (later file wins per top-level variable). See [TODO.md](TODO.md) for optional CI overlays later.
 
 ## GitHub Actions auth
 
 CI uses **GitHub Actions OIDC → AWS IAM** only (no static access keys, no Vault for AWS creds).
 
-1. Bootstrap / manage the OIDC provider + `gha-tf-shared` role per account (`bootstrap-github-oidc.sh` / `stacks/iam`).
-2. Workflows call [`.github/actions/setup-aws-creds`](.github/actions/setup-aws-creds/action.yml) with `role_arn` from the matrix (`arn:aws:iam::<aws_account_id>:role/<github_actions_role_name>` from `environments.yaml`).
+1. Bootstrap / manage the OIDC provider + roles per account (`bootstrap-github-oidc.sh` / `stacks/iam`):
+   - **`gha-tf-shared` (apply)** — trust only `mezorn-com/ubcabv4-shared-infra` on `ref:refs/heads/main` and `ref:refs/tags/prod-v*`
+   - **`gha-tf-shared-plan` (plan)** — trust only that repo’s `pull_request` (PR terraform plan)
+2. Workflows call [`.github/actions/setup-aws-creds`](.github/actions/setup-aws-creds/action.yml) with the matrix role ARN from `environments.yaml` (`aws_role_arn` for apply-main / apply-prod; `aws_plan_role_arn` for PR plan).
 3. Jobs need `permissions: id-token: write`.
+
+After tightening trust, re-run bootstrap (updates existing role trust) or apply `stacks/iam` in each account before expecting CI to work.
 
 ### Environments
 
@@ -115,7 +113,7 @@ Create GitHub Environments `dev`, `staging`, and `prod` (names from `environment
 | `staging` | nonprod | stage `staging` |
 | `prod` | prod | account stacks (`prod`) + stage `prod` |
 
-Put **required reviewers** on the GitHub Environment `prod` — the gated path plans first (no approval), then a single `approve` job uses Environment `prod` so you can review the plan before apply. To release prod (`auto_apply: false`), push a `prod-v*` tag on the intended SHA (preferred), or run **apply** via workflow_dispatch with **include_gated**. You can remove leftover `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` Environment secrets and the `VAULT_SERVER` variable if present.
+Put **required reviewers** on the GitHub Environment `prod`. [`apply-prod.yml`](.github/workflows/apply-prod.yml) plans first (no Environment on plan), then `apply` waits on Environment approval. PR / apply-main do not gate on prod. Concurrent prod runs share concurrency group `infra-gated-prod` (queued, not cancelled).
 
 ## Adding a new stage or account
 

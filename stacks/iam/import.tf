@@ -15,3 +15,15 @@
 #   to = aws_iam_role_policy_attachment.github_actions_admin
 #   id = "gha-tf-shared/arn:aws:iam::aws:policy/AdministratorAccess"
 # }
+#
+# Plan role is created by Terraform (or bootstrap); import if bootstrapped:
+#
+# import {
+#   to = aws_iam_role.github_actions_plan
+#   id = "gha-tf-shared-plan"
+# }
+#
+# import {
+#   to = aws_iam_role_policy_attachment.github_actions_plan_admin
+#   id = "gha-tf-shared-plan/arn:aws:iam::aws:policy/AdministratorAccess"
+# }

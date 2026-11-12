@@ -1,32 +1,9 @@
-name: terraform-pr
+name: pr
 
 on:
-  workflow_call:
-    inputs:
-      base_ref:
-        description: "PR base branch name for diff (e.g. main)"
-        required: false
-        type: string
-        default: ""
-      force_stacks:
-        description: "Optional comma-separated stacks (skip path diff)"
-        required: false
-        type: string
-        default: ""
-      include_manual:
-        description: "Include manual-only stacks (tfstate, iam)"
-        required: false
-        type: boolean
-        default: false
-      only_tf_env:
-        description: "Optional: only this tf_env (account or stage name)"
-        required: false
-        type: string
-        default: ""
-      terraform_version:
-        required: false
-        type: string
-        default: "1.17.1"
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -47,11 +24,8 @@ jobs:
       - name: Resolve stacks
         id: resolve
         env:
-          MODE: plan
-          BASE_REF: ${{ inputs.base_ref }}
-          FORCE_STACKS: ${{ inputs.force_stacks }}
-          INCLUDE_MANUAL: ${{ inputs.include_manual }}
-          ONLY_TF_ENV: ${{ inputs.only_tf_env }}
+          TARGET: nonprod
+          BASE_REF: ${{ github.base_ref }}
         run: |
           chmod +x .github/scripts/*.sh
           .github/scripts/resolve-stacks.sh
@@ -60,10 +34,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-      - uses: hashicorp/setup-terraform@v4
-        with:
-          terraform_version: ${{ inputs.terraform_version }}
-          terraform_wrapper: false
+      - uses: ./.github/actions/setup-terraform
       - name: terraform fmt -check
         run: terraform fmt -check -recursive -diff
 
@@ -71,7 +42,6 @@ jobs:
     needs: [resolve, fmt]
     if: needs.resolve.outputs.has_stacks == 'true'
     runs-on: ubuntu-24.04
-    environment: ${{ matrix.github_environment }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.resolve.outputs.matrix) }}
@@ -86,19 +56,9 @@ jobs:
       - name: Setup AWS credentials
         uses: ./.github/actions/setup-aws-creds
         with:
-          role_arn: ${{ matrix.aws_role_arn }}
+          role_arn: ${{ matrix.aws_plan_role_arn }}
 
-
-      - name: Prepare tfvars
-        uses: ./.github/actions/prepare-tfvars
-        with:
-          stack: ${{ matrix.stack }}
-          tf_env: ${{ matrix.tf_env }}
-
-      - uses: hashicorp/setup-terraform@v4
-        with:
-          terraform_version: ${{ inputs.terraform_version }}
-          terraform_wrapper: false
+      - uses: ./.github/actions/setup-terraform
 
       - name: Terraform init
         run: bash "${GITHUB_WORKSPACE}/.github/scripts/ci-terraform.sh" init "${{ matrix.tf_env }}" "${{ matrix.stack }}"
@@ -121,16 +81,15 @@ jobs:
             stacks/${{ matrix.stack }}/plan.txt
             stacks/${{ matrix.stack }}/tfplan
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7
 
       - name: PR comment
-        if: always() && github.event_name == 'pull_request' && (success() || failure())
+        if: always() && (success() || failure())
         uses: actions/github-script@v8
         env:
           PLAN_EXIT: ${{ steps.plan.outputs.exit_code }}
           STACK: ${{ matrix.stack }}
           TF_ENV: ${{ matrix.tf_env }}
-          SCHEME: ${{ matrix.scheme }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           ARTIFACT_NAME: tfplan-${{ matrix.stack }}-${{ matrix.tf_env }}
         with:

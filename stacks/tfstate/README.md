@@ -2,7 +2,7 @@
 
 Owns the account-scoped S3 bucket that stores remote Terraform state.
 
-Account-scoped envs: **`nonprod` | `prod`** (see [`environments.yaml`](../../environments.yaml)). Marked `manual: true` — not auto-applied by path CI; use workflow **tfstate-manual** (or local CLI).
+Account-scoped envs: **`nonprod` | `prod`** (see [`environments.yaml`](../../environments.yaml)). PR/merge → nonprod; `prod-v*` tag → prod (plan → approve → apply).
 
 ## Bootstrap → Terraform
 
@@ -19,7 +19,7 @@ Account-scoped envs: **`nonprod` | `prod`** (see [`environments.yaml`](../../env
 3. Init this stack:
 
    ```bash
-   ./tf-init.sh tfstate nonprod
+   bash .github/scripts/ci-terraform.sh init nonprod tfstate
    ```
 
 4. Confirm committed `nonprod.tfvars` / `prod.tfvars` (`aws_profile = ""` in git; pass `-var=aws_profile=…` locally if needed).
@@ -36,6 +36,4 @@ Account-scoped envs: **`nonprod` | `prod`** (see [`environments.yaml`](../../env
 
 ## CI
 
-- Path-triggered apply **ignores** this stack (`stacks.tfstate.manual: true` in `environments.yaml`)
-- Actions → **tfstate-manual** → choose `nonprod`/`prod` and `plan`/`apply`
-- Or **apply** workflow_dispatch with `include_manual` + `include_gated` as needed (prod tags do not include manual stacks)
+Same as other account stacks: path changes plan/apply on main for `nonprod`; tag `prod-v*` for `prod`.

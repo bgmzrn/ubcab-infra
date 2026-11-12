@@ -22,12 +22,18 @@ variable "aws_profile" {
 
 variable "github_actions_role_name" {
   type        = string
-  description = "IAM role name assumed by GitHub Actions via OIDC."
+  description = "IAM role for apply (OIDC sub: main + prod-v* tags)."
   default     = "gha-tf-shared"
+}
+
+variable "github_actions_plan_role_name" {
+  type        = string
+  description = "IAM role for PR plan (OIDC sub: pull_request)."
+  default     = "gha-tf-shared-plan"
 }
 
 variable "github_repository" {
   type        = string
   description = "GitHub repo (owner/name) allowed in the OIDC sub claim."
-  default     = "mezorn-com/ubcabv4-infra"
+  default     = "mezorn-com/ubcabv4-shared-infra"
 }

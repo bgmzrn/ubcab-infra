@@ -7,7 +7,7 @@ output "project" {
 }
 
 output "managed_repo" {
-  value       = "ubcabv4-infra"
+  value       = "ubcabv4-shared-infra"
   description = "GitHub repository short name (ManagedRepo tag)"
 }
 
@@ -17,7 +17,7 @@ output "github_owner" {
 }
 
 output "github_infra_repository" {
-  value       = "mezorn-com/ubcabv4-infra"
+  value       = "mezorn-com/ubcabv4-shared-infra"
   description = "Full GitHub repository for this infra"
 }
 
