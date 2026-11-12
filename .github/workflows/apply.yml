@@ -36,10 +36,12 @@ jobs:
     uses: ./.github/workflows/terraform-apply.yml
     with:
       force_stacks: ${{ github.event.inputs.force_stacks || '' }}
-      # prod-v* tags apply all prod account + stage stacks at that SHA.
+      # prod-v* tags: plan all prod stacks at that SHA, wait for Environment
+      # approval, then apply the saved plans.
       only_tf_env: ${{ startsWith(github.ref, 'refs/tags/prod-v') && 'prod' || github.event.inputs.only_tf_env || '' }}
       include_gated: ${{ startsWith(github.ref, 'refs/tags/prod-v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.include_gated == 'true') }}
       include_manual: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.include_manual == 'true' }}
-      # Tag pushes: no path diff — apply every prod-eligible stack.
+      approval_environment: prod
+      # Tag pushes: no path diff — plan/apply every prod-eligible stack.
       before_sha: ${{ startsWith(github.ref, 'refs/tags/') && '' || github.event.before || '' }}
       after_sha: ${{ startsWith(github.ref, 'refs/tags/') && '' || github.sha }}

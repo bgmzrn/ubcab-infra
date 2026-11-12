@@ -43,18 +43,18 @@ Add/remove an environment by editing `environments.yaml`, then adding `backends/
 ```
 feature/*  →  PR to main (plan)  →  merge to main (apply)
                                       ├─ nonprod / dev / staging  → apply immediately
-                                      └─ prod                     → tag prod-v* on the SHA to apply
+                                      └─ prod                     → tag prod-v* → plan → approve → apply
 ```
 
 | Event | Workflow | Behavior |
 |-------|----------|----------|
 | PR → `main` | [`ci.yml`](.github/workflows/ci.yml) | `fmt` + plan all changed stacks × applicable tf_envs (incl. prod when tfvars exist) |
 | Push → `main` | [`apply.yml`](.github/workflows/apply.yml) | Apply `auto_apply: true` (nonprod, dev, staging). Prod skipped. |
-| Tag `prod-v*` | [`apply.yml`](.github/workflows/apply.yml) | Apply all prod account + stage stacks at that commit (`include_gated` + `only_tf_env=prod`). |
-| Manual | `apply.yml` dispatch | Fallback for prod (`include_gated`) or `include_manual` / `force_stacks`. |
+| Tag `prod-v*` | [`apply.yml`](.github/workflows/apply.yml) | Plan all prod stacks at that SHA, wait for GitHub Environment `prod` approval, apply saved plans. |
+| Manual | `apply.yml` dispatch | Same gated flow with `include_gated`, or `include_manual` / `force_stacks`. |
 | Manual | `tfstate-manual` | Plan/apply `tfstate` for `nonprod` \| `prod` |
 
-Example: `git tag prod-v1.0.0 <sha> && git push origin prod-v1.0.0`
+Example: `git tag prod-v1.0.0 <sha> && git push origin prod-v1.0.0` (or create the tag from the GitHub Releases UI). Then open the Actions run, review the plan job summary/artifacts, and approve the `prod` Environment gate.
 
 Commit message `#skip-apply` skips apply on push to `main` (not used for tags).
 
@@ -115,7 +115,7 @@ Create GitHub Environments `dev`, `staging`, and `prod` (names from `environment
 | `staging` | nonprod | stage `staging` |
 | `prod` | prod | account stacks (`prod`) + stage `prod` |
 
-Put **required reviewers** on `prod` if you want an approval gate on tag (or dispatch) prod apply. To apply prod (`auto_apply: false`), push a `prod-v*` tag on the intended SHA (preferred), or run **apply** via workflow_dispatch with **include_gated**. You can remove leftover `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` Environment secrets and the `VAULT_SERVER` variable if present.
+Put **required reviewers** on the GitHub Environment `prod` — the gated path plans first (no approval), then a single `approve` job uses Environment `prod` so you can review the plan before apply. To release prod (`auto_apply: false`), push a `prod-v*` tag on the intended SHA (preferred), or run **apply** via workflow_dispatch with **include_gated**. You can remove leftover `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` Environment secrets and the `VAULT_SERVER` variable if present.
 
 ## Adding a new stage or account
 

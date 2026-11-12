@@ -3,7 +3,7 @@
 # Usage:
 #   ci-terraform.sh init  <tf_env> <stack>
 #   ci-terraform.sh plan  <tf_env> [--detailed-exitcode] [--out FILE] [--tee FILE]
-#   ci-terraform.sh apply <tf_env>
+#   ci-terraform.sh apply <tf_env> [--plan FILE]
 #   ci-terraform.sh validate
 set -euo pipefail
 
@@ -16,7 +16,7 @@ ROOT="${GITHUB_WORKSPACE:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 usage() {
   echo "Usage: $0 init <tf_env> <stack>" >&2
   echo "       $0 plan <tf_env> [--detailed-exitcode] [--out FILE] [--tee FILE]" >&2
-  echo "       $0 apply <tf_env>" >&2
+  echo "       $0 apply <tf_env> [--plan FILE]" >&2
   echo "       $0 validate" >&2
   exit 1
 }
@@ -96,6 +96,32 @@ cmd_plan() {
 
 cmd_apply() {
   local tf_env="$1"
+  shift
+  local plan_file=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --plan)
+        plan_file="${2:?--plan requires a file}"
+        shift 2
+        ;;
+      *)
+        echo "Unknown apply option: $1" >&2
+        usage
+        ;;
+    esac
+  done
+
+  if [[ -n "$plan_file" ]]; then
+    if [[ ! -f "$plan_file" ]]; then
+      echo "Plan file not found: $plan_file" >&2
+      exit 1
+    fi
+    # Saved plan is self-contained (no -var-file / -var).
+    terraform apply -input=false "$plan_file"
+    return
+  fi
+
   local vf=()
   tf_var_file_args "$tf_env" vf
   terraform apply -input=false -auto-approve \
@@ -121,8 +147,8 @@ case "$command" in
     cmd_plan "$@"
     ;;
   apply)
-    [[ $# -eq 1 ]] || usage
-    cmd_apply "$1"
+    [[ $# -ge 1 ]] || usage
+    cmd_apply "$@"
     ;;
   validate)
     cmd_validate

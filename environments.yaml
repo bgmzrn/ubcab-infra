@@ -7,8 +7,9 @@
 #
 # Apply policy (trunk-based on main):
 #   auto_apply: true  → apply on merge to main.
-#   auto_apply: false → skipped on merge; apply via prod-v* tag (preferred)
-#                       or apply workflow_dispatch with include_gated.
+#   auto_apply: false → skipped on merge; prod-v* tag (preferred) or
+#                       apply workflow_dispatch with include_gated runs
+#                       plan → GitHub Environment approval → apply saved plan.
 #                       Manual stacks (tfstate/iam): include_manual.
 
 accounts:
@@ -25,7 +26,7 @@ accounts:
     backend: backends/prod.hcl
     github_actions_role_name: gha-tf-shared
     github_environment: prod
-    # Gated: git tag prod-v* (or apply dispatch with include_gated).
+    # Gated: prod-v* tag / include_gated → plan, approve (env prod), apply.
     auto_apply: false
 
 stages:
