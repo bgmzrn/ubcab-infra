@@ -22,14 +22,27 @@ function buildCommentBody(plan, env) {
     exit === '2' ? 'Changes present' :
     `Failed (exit ${exit})`;
 
+  // Terraform 1.5+: optional "N to import, " before add/change/destroy
   const summaryMatch = plan.match(
-    /Plan:\s+(\d+)\s+to add,\s+(\d+)\s+to change,\s+(\d+)\s+to destroy/
+    /Plan:\s+(?:(\d+)\s+to import,\s+)?(\d+)\s+to add,\s+(\d+)\s+to change,\s+(\d+)\s+to destroy/
   );
-  const planSummary = summaryMatch
-    ? `Plan: **${summaryMatch[1]}** to add, **${summaryMatch[2]}** to change, **${summaryMatch[3]}** to destroy`
-    : (exit === '0'
-      ? 'Plan: **0** to add, **0** to change, **0** to destroy'
-      : '_No Plan: summary found_');
+  let planSummary;
+  if (summaryMatch) {
+    const parts = [];
+    if (summaryMatch[1] != null) {
+      parts.push(`**${summaryMatch[1]}** to import`);
+    }
+    parts.push(
+      `**${summaryMatch[2]}** to add`,
+      `**${summaryMatch[3]}** to change`,
+      `**${summaryMatch[4]}** to destroy`,
+    );
+    planSummary = `Plan: ${parts.join(', ')}`;
+  } else if (exit === '0') {
+    planSummary = 'Plan: **0** to add, **0** to change, **0** to destroy';
+  } else {
+    planSummary = '_No Plan: summary found_';
+  }
 
   let output = plan.trimEnd();
   let truncated = false;

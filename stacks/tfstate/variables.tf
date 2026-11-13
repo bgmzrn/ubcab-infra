@@ -18,3 +18,8 @@ variable "bucket_name" {
   type        = string
   description = "Existing Terraform state bucket name (from bootstrap-bucket.sh)."
 }
+
+# Import variables (delete after import is done)
+variable "import_aws_s3_bucket_state" {
+  type = string
+}

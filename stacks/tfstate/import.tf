@@ -2,5 +2,5 @@
 # Companion resources (versioning, encryption, …) are created by this stack.
 import {
   to = aws_s3_bucket.state
-  id = "bulgaatest-tfstate-606284766767-ap-southeast-1"
+  id = var.import_aws_s3_bucket_state
 }
