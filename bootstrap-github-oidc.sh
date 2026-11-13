@@ -2,7 +2,7 @@
 # Create GitHub Actions OIDC provider + IAM roles (chicken-and-egg).
 # Ongoing management is owned by stacks/iam.
 #
-# Apply role (default gha-tf-shared): refs/heads/main + refs/tags/prod-v*
+# Apply role (default gha-tf-shared): GitHub Environment jobs (apply-main / apply-prod)
 # Plan role  (default gha-tf-shared-plan): pull_request
 #
 # --repo must be OWNER@owner_id/NAME@repo_id (OIDC sub repo segment).
@@ -14,16 +14,19 @@ AUDIENCE="sts.amazonaws.com"
 POLICY_ARN="arn:aws:iam::aws:policy/AdministratorAccess"
 DEFAULT_ROLE_NAME="gha-tf-shared"
 DEFAULT_PLAN_ROLE_NAME="gha-tf-shared-plan"
+DEFAULT_ENVIRONMENTS="dev,staging"
 REPO_PATTERN='^[^/@]+@[0-9]+/[^/@]+@[0-9]+$'
 
 usage() {
   cat <<EOF
-Usage: $0 [--profile PROFILE] [--region REGION] --repo OWNER@owner_id/NAME@repo_id [apply-role-name]
+Usage: $0 [--profile PROFILE] [--region REGION] --repo OWNER@owner_id/NAME@repo_id [--environments LIST] [apply-role-name]
 
-  --profile   AWS CLI profile (optional)
-  --region    AWS region (optional; IAM is global)
-  --repo      GitHub OIDC repo path (required), e.g. mezorn-com@123/ubcabv4-shared-infra@456
-  apply-role  Apply IAM role name (default: ${DEFAULT_ROLE_NAME})
+  --profile        AWS CLI profile (optional)
+  --region         AWS region (optional; IAM is global)
+  --repo           GitHub OIDC repo path (required), e.g. mezorn-com@123/ubcabv4-shared-infra@456
+  --environments   Comma-separated GitHub Environment names for the apply role
+                   (default: ${DEFAULT_ENVIRONMENTS}; use prod for the prod account)
+  apply-role       Apply IAM role name (default: ${DEFAULT_ROLE_NAME})
 
 Creates the GitHub OIDC provider (if missing), apply + plan IAM roles
 trustable via AssumeRoleWithWebIdentity, and attaches AdministratorAccess.
@@ -36,6 +39,7 @@ EOF
 PROFILE=""
 REGION=""
 REPO=""
+ENVIRONMENTS_CSV="$DEFAULT_ENVIRONMENTS"
 ROLE_NAME=""
 
 while [[ $# -gt 0 ]]; do
@@ -53,6 +57,11 @@ while [[ $# -gt 0 ]]; do
     --repo)
       [[ $# -ge 2 ]] || usage
       REPO="$2"
+      shift 2
+      ;;
+    --environments)
+      [[ $# -ge 2 ]] || usage
+      ENVIRONMENTS_CSV="$2"
       shift 2
       ;;
     -h|--help)
@@ -85,6 +94,26 @@ if [[ ! "$REPO" =~ $REPO_PATTERN ]]; then
   echo "ERROR: --repo must be OWNER@owner_id/NAME@repo_id (got: ${REPO})" >&2
   exit 1
 fi
+
+IFS=',' read -r -a ENVIRONMENTS <<< "$ENVIRONMENTS_CSV"
+if [[ ${#ENVIRONMENTS[@]} -eq 0 ]]; then
+  echo "ERROR: --environments must list at least one name" >&2
+  exit 1
+fi
+
+APPLY_SUBS_JSON="["
+for i in "${!ENVIRONMENTS[@]}"; do
+  env_name="$(echo "${ENVIRONMENTS[$i]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+  if [[ -z "$env_name" ]]; then
+    echo "ERROR: empty environment name in --environments" >&2
+    exit 1
+  fi
+  if [[ $i -gt 0 ]]; then
+    APPLY_SUBS_JSON+=", "
+  fi
+  APPLY_SUBS_JSON+="\"repo:${REPO}:environment:${env_name}\""
+done
+APPLY_SUBS_JSON+="]"
 
 AWS_ARGS=()
 if [[ -n "$PROFILE" ]]; then
@@ -129,10 +158,7 @@ APPLY_TRUST_DOC=$(cat <<EOF
           "${OIDC_HOST}:aud": "${AUDIENCE}"
         },
         "StringLike": {
-          "${OIDC_HOST}:sub": [
-            "repo:${REPO}:ref:refs/heads/main",
-            "repo:${REPO}:ref:refs/tags/prod-v*"
-          ]
+          "${OIDC_HOST}:sub": ${APPLY_SUBS_JSON}
         }
       }
     }
@@ -172,7 +198,7 @@ echo " Account ID  : ${ACCOUNT_ID}"
 echo " OIDC URL    : ${OIDC_URL}"
 echo " GitHub repo : ${REPO}"
 echo " Apply role  : ${ROLE_NAME}"
-echo "   trust     : main + prod-v*"
+echo "   trust     : environment:${ENVIRONMENTS_CSV//,/, environment:}"
 echo " Plan role   : ${PLAN_ROLE_NAME}"
 echo "   trust     : pull_request"
 echo " Policy      : ${POLICY_ARN}"
@@ -233,7 +259,7 @@ ensure_role() {
 }
 
 ensure_role "$ROLE_NAME" "$ROLE_ARN" "$APPLY_TRUST_DOC" \
-  "GitHub Actions OIDC apply role for ${REPO} (main + prod-v*)"
+  "GitHub Actions OIDC apply role for ${REPO} (environments)"
 ensure_role "$PLAN_ROLE_NAME" "$PLAN_ROLE_ARN" "$PLAN_TRUST_DOC" \
   "GitHub Actions OIDC plan role for ${REPO} (pull_request)"
 
@@ -242,3 +268,4 @@ echo "Done (bootstrap only)."
 echo "  apply_role_arn=${ROLE_ARN}"
 echo "  plan_role_arn=${PLAN_ROLE_ARN}"
 echo "  github_repository=${REPO}"
+echo "  github_actions_environments=${ENVIRONMENTS_CSV}"

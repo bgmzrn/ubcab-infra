@@ -9,24 +9,27 @@ Account-scoped envs: **`nonprod` | `prod`**. PR/merge → nonprod; `prod-v*` tag
 Someone with account admin access runs this once per account:
 
 ```bash
-./bootstrap-github-oidc.sh [--profile PROFILE] --repo OWNER@owner_id/NAME@repo_id gha-tf-shared
+# nonprod (dev + staging Environments)
+./bootstrap-github-oidc.sh [--profile PROFILE] --repo OWNER@owner_id/NAME@repo_id --environments dev,staging gha-tf-shared
+
+# prod
+./bootstrap-github-oidc.sh [--profile PROFILE] --repo OWNER@owner_id/NAME@repo_id --environments prod gha-tf-shared
 ```
 
 Creates/updates (if missing):
 
 1. IAM OIDC provider for `token.actions.githubusercontent.com`
-2. **Apply role** `gha-tf-shared` — trust `sub` = `repo:OWNER@owner_id/NAME@repo_id:ref:refs/heads/main` **or** `…:ref:refs/tags/prod-v*`
-3. **Plan role** `gha-tf-shared-plan` — trust `sub` = `repo:OWNER@owner_id/NAME@repo_id:pull_request`
+2. **Apply role** `gha-tf-shared` — trust `sub` = `repo:…:environment:<name>` for each `--environments` value (matches apply-main / apply-prod `environment:`)
+3. **Plan role** `gha-tf-shared-plan` — trust `sub` = `repo:…:pull_request`
 4. Attaches `AdministratorAccess` on both
 
 Prints the **role ARNs only** (no access keys). Re-running updates trust policies on existing roles.
 
-Set the same path in this stack’s tfvars as `github_repository`.
+Set `github_repository` and `github_actions_environments` in this stack’s tfvars to match.
 
 Then take ownership in this stack:
 
-1. Uncomment the `import` blocks in `import.tf` (set account id / role names).
-2. Init and apply:
+1. Set `import_*` values in tfvars (see `import.tf`), then init and apply:
 
    ```bash
    bash .github/scripts/ci-terraform.sh init nonprod iam   # or prod
@@ -35,8 +38,8 @@ Then take ownership in this stack:
    terraform apply -var-file=nonprod.tfvars
    ```
 
-3. Comment/remove `import` blocks after the resources are in state.
-4. CI: apply-main / apply-prod use the **apply** role; PR `ci` uses the **plan** role.
+2. Comment/remove `import` blocks (and `import_*` vars) after the resources are in state.
+3. CI: apply-main / apply-prod use the **apply** role; PR `ci` uses the **plan** role.
 
 ## Extending
 
