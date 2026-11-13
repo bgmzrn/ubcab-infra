@@ -34,6 +34,10 @@ stages:
     github_environment: prod
 
 stacks:
+  network:
+    scope: account
+  security-groups:
+    scope: account
   iam:
     scope: account
   tfstate:
