@@ -89,7 +89,7 @@ bash .github/scripts/ci-terraform.sh init nonprod network
 cd stacks/network && terraform plan -var-file=nonprod.tfvars
 ```
 
-Each stack commits `<tf_env>.tfvars` (keep `aws_profile = ""` in git). CI always passes `-var=aws_profile=`. Locally you can override with `-var=aws_profile=myprofile`.
+Each stack commits `<tf_env>.tfvars`. Terraform runs in GitHub Actions via OIDC (no provider `profile`).
 
 ## GitHub Actions auth
 
