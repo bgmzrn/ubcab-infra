@@ -1,0 +1,98 @@
+name: pr
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.resolve.outputs.matrix }}
+      has_stacks: ${{ steps.resolve.outputs.has_stacks }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Resolve stacks
+        id: resolve
+        env:
+          TARGET: nonprod
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          chmod +x .github/scripts/*.sh
+          .github/scripts/resolve-stacks.sh
+
+  fmt:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-terraform
+      - name: terraform fmt -check
+        run: terraform fmt -check -recursive -diff
+
+  plan:
+    needs: [resolve, fmt]
+    if: needs.resolve.outputs.has_stacks == 'true'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.resolve.outputs.matrix) }}
+    env:
+      AWS_DEFAULT_REGION: ap-southeast-1
+    defaults:
+      run:
+        working-directory: stacks/${{ matrix.stack }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup AWS credentials
+        uses: ./.github/actions/setup-aws-creds
+        with:
+          role_arn: ${{ matrix.aws_plan_role_arn }}
+
+      - uses: ./.github/actions/setup-terraform
+
+      - name: Terraform init
+        run: bash "${GITHUB_WORKSPACE}/.github/scripts/ci-terraform.sh" init "${{ matrix.tf_env }}" "${{ matrix.stack }}"
+
+      - name: Terraform validate
+        run: bash "${GITHUB_WORKSPACE}/.github/scripts/ci-terraform.sh" validate
+
+      - name: Terraform plan
+        id: plan
+        run: >
+          bash "${GITHUB_WORKSPACE}/.github/scripts/ci-terraform.sh" plan "${{ matrix.tf_env }}"
+          --detailed-exitcode --out tfplan --tee plan.txt
+
+      - name: Upload plan artifacts
+        if: success() || failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: tfplan-${{ matrix.stack }}-${{ matrix.tf_env }}
+          path: |
+            stacks/${{ matrix.stack }}/plan.txt
+            stacks/${{ matrix.stack }}/tfplan
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: PR comment
+        if: always() && (success() || failure())
+        uses: actions/github-script@v8
+        env:
+          PLAN_EXIT: ${{ steps.plan.outputs.exit_code }}
+          STACK: ${{ matrix.stack }}
+          TF_ENV: ${{ matrix.tf_env }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ARTIFACT_NAME: tfplan-${{ matrix.stack }}-${{ matrix.tf_env }}
+        with:
+          script: |
+            const postPlanComment = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/post-plan-comment.js`);
+            await postPlanComment({ github, context });

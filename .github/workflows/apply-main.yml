@@ -1,0 +1,113 @@
+name: apply-main
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix_dev: ${{ steps.waves.outputs.matrix_dev }}
+      has_dev: ${{ steps.waves.outputs.has_dev }}
+      matrix_staging: ${{ steps.waves.outputs.matrix_staging }}
+      has_staging: ${{ steps.waves.outputs.has_staging }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Resolve stacks
+        id: resolve
+        env:
+          TARGET: nonprod
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          chmod +x .github/scripts/*.sh
+          .github/scripts/resolve-stacks.sh
+
+      - name: Split promotion waves
+        id: waves
+        if: steps.resolve.outputs.has_stacks == 'true'
+        env:
+          MATRIX_JSON: ${{ steps.resolve.outputs.matrix }}
+        run: |
+          chmod +x .github/scripts/*.sh
+          .github/scripts/split-matrix-waves.sh
+
+  # First wave: account-scoped (nonprod) + stage-scoped (dev).
+  apply-dev:
+    needs: resolve
+    if: needs.resolve.outputs.has_dev == 'true'
+    runs-on: ubuntu-24.04
+    environment: ${{ matrix.github_environment }}
+    strategy:
+      fail-fast: true
+      matrix: ${{ fromJson(needs.resolve.outputs.matrix_dev) }}
+    concurrency:
+      group: infra-${{ matrix.tf_env }}-${{ matrix.stack }}
+      cancel-in-progress: false
+    env:
+      AWS_DEFAULT_REGION: ap-southeast-1
+    defaults:
+      run:
+        working-directory: stacks/${{ matrix.stack }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup AWS credentials
+        uses: ./.github/actions/setup-aws-creds
+        with:
+          role_arn: ${{ matrix.aws_role_arn }}
+
+      - uses: ./.github/actions/setup-terraform
+
+      - name: Terraform init
+        run: bash "${GITHUB_WORKSPACE}/.github/scripts/ci-terraform.sh" init "${{ matrix.tf_env }}" "${{ matrix.stack }}"
+
+      - name: Terraform apply
+        run: bash "${GITHUB_WORKSPACE}/.github/scripts/ci-terraform.sh" apply "${{ matrix.tf_env }}"
+
+  # Second wave: stage-scoped (staging). Skipped if apply-dev failed.
+  apply-staging:
+    needs: [resolve, apply-dev]
+    if: >
+      always() &&
+      !cancelled() &&
+      needs.resolve.result == 'success' &&
+      needs.resolve.outputs.has_staging == 'true' &&
+      (needs.apply-dev.result == 'success' || needs.apply-dev.result == 'skipped')
+    runs-on: ubuntu-24.04
+    environment: ${{ matrix.github_environment }}
+    strategy:
+      fail-fast: true
+      matrix: ${{ fromJson(needs.resolve.outputs.matrix_staging) }}
+    concurrency:
+      group: infra-${{ matrix.tf_env }}-${{ matrix.stack }}
+      cancel-in-progress: false
+    env:
+      AWS_DEFAULT_REGION: ap-southeast-1
+    defaults:
+      run:
+        working-directory: stacks/${{ matrix.stack }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup AWS credentials
+        uses: ./.github/actions/setup-aws-creds
+        with:
+          role_arn: ${{ matrix.aws_role_arn }}
+
+      - uses: ./.github/actions/setup-terraform
+
+      - name: Terraform init
+        run: bash "${GITHUB_WORKSPACE}/.github/scripts/ci-terraform.sh" init "${{ matrix.tf_env }}" "${{ matrix.stack }}"
+
+      - name: Terraform apply
+        run: bash "${GITHUB_WORKSPACE}/.github/scripts/ci-terraform.sh" apply "${{ matrix.tf_env }}"

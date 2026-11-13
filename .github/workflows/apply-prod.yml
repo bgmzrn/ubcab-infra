@@ -1,0 +1,149 @@
+name: apply-prod
+
+on:
+  push:
+    tags:
+      - "prod-v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: infra-gated-prod
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.resolve.outputs.matrix }}
+      has_stacks: ${{ steps.resolve.outputs.has_stacks }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Resolve stacks
+        id: resolve
+        env:
+          TARGET: prod
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          chmod +x .github/scripts/*.sh
+
+          current_tag="${GITHUB_REF_NAME}"
+          prev_tag="$(
+            git tag -l 'prod-v*' --sort=-v:refname \
+              | grep -vxF "$current_tag" \
+              | head -n1 || true
+          )"
+
+          if [[ -n "$prev_tag" ]]; then
+            export BEFORE_SHA
+            BEFORE_SHA="$(git rev-list -n 1 "$prev_tag")"
+            echo "Diffing changed stacks: ${prev_tag} (${BEFORE_SHA}) → ${AFTER_SHA}"
+          else
+            echo "No previous prod-v* tag — selecting all stacks"
+            export ALL_STACKS=true
+          fi
+
+          .github/scripts/resolve-stacks.sh
+
+  plan:
+    needs: resolve
+    if: needs.resolve.outputs.has_stacks == 'true'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.resolve.outputs.matrix) }}
+    concurrency:
+      group: infra-${{ matrix.tf_env }}-${{ matrix.stack }}
+      cancel-in-progress: false
+    env:
+      AWS_DEFAULT_REGION: ap-southeast-1
+    defaults:
+      run:
+        working-directory: stacks/${{ matrix.stack }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup AWS credentials
+        uses: ./.github/actions/setup-aws-creds
+        with:
+          role_arn: ${{ matrix.aws_role_arn }}
+
+      - uses: ./.github/actions/setup-terraform
+
+      - name: Terraform init
+        run: bash "${GITHUB_WORKSPACE}/.github/scripts/ci-terraform.sh" init "${{ matrix.tf_env }}" "${{ matrix.stack }}"
+
+      - name: Terraform plan
+        id: plan
+        run: >
+          bash "${GITHUB_WORKSPACE}/.github/scripts/ci-terraform.sh" plan "${{ matrix.tf_env }}"
+          --detailed-exitcode --out tfplan --tee plan.txt
+
+      - name: Write plan summary
+        if: success() || failure()
+        run: |
+          {
+            echo "## ${{ matrix.stack }} / ${{ matrix.tf_env }}"
+            echo ""
+            echo '```'
+            cat plan.txt 2>/dev/null || echo "(no plan.txt)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload plan artifacts
+        if: success() || failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: tfplan-${{ matrix.stack }}-${{ matrix.tf_env }}
+          path: |
+            stacks/${{ matrix.stack }}/plan.txt
+            stacks/${{ matrix.stack }}/tfplan
+          if-no-files-found: warn
+          retention-days: 14
+
+  apply:
+    needs: [resolve, plan]
+    if: >
+      always() &&
+      needs.resolve.outputs.has_stacks == 'true' &&
+      needs.plan.result == 'success'
+    runs-on: ubuntu-24.04
+    environment: ${{ matrix.github_environment }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.resolve.outputs.matrix) }}
+    concurrency:
+      group: infra-${{ matrix.tf_env }}-${{ matrix.stack }}
+      cancel-in-progress: false
+    env:
+      AWS_DEFAULT_REGION: ap-southeast-1
+    defaults:
+      run:
+        working-directory: stacks/${{ matrix.stack }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup AWS credentials
+        uses: ./.github/actions/setup-aws-creds
+        with:
+          role_arn: ${{ matrix.aws_role_arn }}
+
+      - name: Download plan artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: tfplan-${{ matrix.stack }}-${{ matrix.tf_env }}
+          path: ${{ github.workspace }}
+
+      - uses: ./.github/actions/setup-terraform
+
+      - name: Terraform init
+        run: bash "${GITHUB_WORKSPACE}/.github/scripts/ci-terraform.sh" init "${{ matrix.tf_env }}" "${{ matrix.stack }}"
+
+      - name: Terraform apply saved plan
+        run: bash "${GITHUB_WORKSPACE}/.github/scripts/ci-terraform.sh" apply "${{ matrix.tf_env }}" --plan tfplan
