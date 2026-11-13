@@ -4,6 +4,8 @@
 #
 # Apply role (default gha-tf-shared): refs/heads/main + refs/tags/prod-v*
 # Plan role  (default gha-tf-shared-plan): pull_request
+#
+# --repo must be OWNER@owner_id/NAME@repo_id (OIDC sub repo segment).
 set -euo pipefail
 
 OIDC_URL="https://token.actions.githubusercontent.com"
@@ -12,15 +14,15 @@ AUDIENCE="sts.amazonaws.com"
 POLICY_ARN="arn:aws:iam::aws:policy/AdministratorAccess"
 DEFAULT_ROLE_NAME="gha-tf-shared"
 DEFAULT_PLAN_ROLE_NAME="gha-tf-shared-plan"
-DEFAULT_REPO="mezorn-com/ubcabv4-shared-infra"
+REPO_PATTERN='^[^/@]+@[0-9]+/[^/@]+@[0-9]+$'
 
 usage() {
   cat <<EOF
-Usage: $0 [--profile PROFILE] [--region REGION] [--repo OWNER/NAME] [apply-role-name]
+Usage: $0 [--profile PROFILE] [--region REGION] --repo OWNER@owner_id/NAME@repo_id [apply-role-name]
 
   --profile   AWS CLI profile (optional)
   --region    AWS region (optional; IAM is global)
-  --repo      GitHub repo allowed to assume the roles (default: ${DEFAULT_REPO})
+  --repo      GitHub OIDC repo path (required), e.g. mezorn-com@123/ubcabv4-shared-infra@456
   apply-role  Apply IAM role name (default: ${DEFAULT_ROLE_NAME})
 
 Creates the GitHub OIDC provider (if missing), apply + plan IAM roles
@@ -33,7 +35,7 @@ EOF
 
 PROFILE=""
 REGION=""
-REPO="$DEFAULT_REPO"
+REPO=""
 ROLE_NAME=""
 
 while [[ $# -gt 0 ]]; do
@@ -73,6 +75,16 @@ done
 
 ROLE_NAME="${ROLE_NAME:-$DEFAULT_ROLE_NAME}"
 PLAN_ROLE_NAME="$DEFAULT_PLAN_ROLE_NAME"
+
+if [[ -z "$REPO" ]]; then
+  echo "ERROR: --repo OWNER@owner_id/NAME@repo_id is required" >&2
+  usage
+fi
+
+if [[ ! "$REPO" =~ $REPO_PATTERN ]]; then
+  echo "ERROR: --repo must be OWNER@owner_id/NAME@repo_id (got: ${REPO})" >&2
+  exit 1
+fi
 
 AWS_ARGS=()
 if [[ -n "$PROFILE" ]]; then
@@ -158,6 +170,7 @@ echo " AWS profile : ${EFFECTIVE_PROFILE}"
 echo " Region      : ${REGION} (IAM is global)"
 echo " Account ID  : ${ACCOUNT_ID}"
 echo " OIDC URL    : ${OIDC_URL}"
+echo " GitHub repo : ${REPO}"
 echo " Apply role  : ${ROLE_NAME}"
 echo "   trust     : main + prod-v*"
 echo " Plan role   : ${PLAN_ROLE_NAME}"
@@ -228,3 +241,4 @@ echo
 echo "Done (bootstrap only)."
 echo "  apply_role_arn=${ROLE_ARN}"
 echo "  plan_role_arn=${PLAN_ROLE_ARN}"
+echo "  github_repository=${REPO}"
