@@ -81,7 +81,7 @@ cmd_plan() {
   if [[ -n "$out_file" ]]; then
     args+=(-out="$out_file")
   fi
-  args+=("${vf[@]}" -var="aws_profile=")
+  args+=("${vf[@]}")
 
   set +e
   if [[ -n "$tee_file" ]]; then
@@ -138,8 +138,7 @@ cmd_apply() {
   local vf=()
   tf_var_file_args "$tf_env" vf
   terraform apply -input=false -auto-approve \
-    "${vf[@]}" \
-    -var="aws_profile="
+    "${vf[@]}"
 }
 
 cmd_validate() {

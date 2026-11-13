@@ -1,0 +1,40 @@
+# Single source of truth for AWS accounts, stages, and stack scope.
+# CI (resolve-stacks / stack-lib) reads this file — add/remove envs here.
+#
+# Accounts = real AWS accounts (shared backend + OIDC role).
+# Stages   = logical envs (dev/staging share nonprod; prod is alone).
+# Stacks   = account-scoped (once per account) or stage-scoped (once per stage).
+#
+# CI flow:
+#   PR to main         → plan nonprod + dev/staging (parallel)
+#   merge to main      → apply nonprod+dev, then staging (sequential needs)
+#   prod-v* tag        → prod (changed stacks since previous prod-v* tag)
+
+# Override per account with github_actions_role_name / github_actions_plan_role_name
+# or full ARNs github_actions_role_arn / github_actions_plan_role_arn.
+accounts:
+  nonprod:
+    aws_account_id: "606284766767"
+    backend: backends/nonprod.hcl
+    github_environment: dev
+  prod:
+    aws_account_id: "788430726908"
+    backend: backends/prod.hcl
+    github_environment: prod
+
+stages:
+  - name: dev
+    account: nonprod
+    github_environment: dev
+  - name: staging
+    account: nonprod
+    github_environment: staging
+  - name: prod
+    account: prod
+    github_environment: prod
+
+stacks:
+  iam:
+    scope: account
+  tfstate:
+    scope: account
