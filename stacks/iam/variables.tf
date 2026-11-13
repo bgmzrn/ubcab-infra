@@ -35,3 +35,25 @@ variable "github_repository" {
     error_message = "github_repository must be OWNER@owner_id/NAME@repo_id."
   }
 }
+
+# Import variables (delete after import is done)
+variable "import_aws_iam_openid_connect_provider_github" {
+  type = string
+}
+
+variable "import_aws_iam_role_github_actions" {
+  type = string
+}
+
+variable "import_aws_iam_role_policy_attachment_github_actions_admin" {
+  type = string
+}
+
+variable "import_aws_iam_role_github_actions_plan" {
+  type = string
+}
+
+variable "import_aws_iam_role_policy_attachment_github_actions_plan_admin" {
+  type = string
+}
+
