@@ -1,6 +1,6 @@
 # GitHub Actions → AWS via OIDC (no long-lived access keys).
 #
-# Apply role (gha-tf-shared): only main and prod-v* tags.
+# Apply role (gha-tf-shared): jobs with GitHub Environment (apply-main / apply-prod).
 # Plan role (gha-tf-shared-plan): pull_request jobs (PR terraform plan).
 # github_repository is OWNER@owner_id/NAME@repo_id.
 
@@ -10,8 +10,8 @@ locals {
   github_oidc_aud  = "sts.amazonaws.com"
 
   github_oidc_apply_subs = [
-    "repo:${var.github_repository}:ref:refs/heads/main",
-    "repo:${var.github_repository}:ref:refs/tags/prod-v*",
+    for env in var.github_actions_environments :
+    "repo:${var.github_repository}:environment:${env}"
   ]
 
   github_oidc_plan_subs = [
@@ -57,7 +57,7 @@ data "aws_iam_policy_document" "github_actions_assume" {
 
 resource "aws_iam_role" "github_actions" {
   name               = var.github_actions_role_name
-  description        = "GitHub Actions OIDC apply role for ${var.github_repository} (main + prod-v*)"
+  description        = "GitHub Actions OIDC apply role for ${var.github_repository} (environments)"
   assume_role_policy = data.aws_iam_policy_document.github_actions_assume.json
 
   tags = {

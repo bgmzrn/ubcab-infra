@@ -77,7 +77,7 @@ Creates an empty bucket only (chicken-and-egg). Harden and manage it with `stack
 Someone with account admin access (e.g. prod role you do not have yet):
 
 ```bash
-./bootstrap-github-oidc.sh [--profile PROFILE] --repo OWNER@owner_id/NAME@repo_id gha-tf-shared
+./bootstrap-github-oidc.sh [--profile PROFILE] --repo OWNER@owner_id/NAME@repo_id --environments dev,staging gha-tf-shared
 ```
 
 Creates the GitHub OIDC provider + IAM role `gha-tf-shared` (`AdministratorAccess`), prints the role ARN only. Import and manage with `stacks/iam` (see that stack’s README). Add more shared users/roles/policies in the same stack.
@@ -96,7 +96,7 @@ Each stack commits `<tf_env>.tfvars`. Terraform runs in GitHub Actions via OIDC 
 CI uses **GitHub Actions OIDC → AWS IAM** only (no static access keys, no Vault for AWS creds).
 
 1. Bootstrap / manage the OIDC provider + roles per account (`bootstrap-github-oidc.sh` / `stacks/iam`) with `github_repository` = `OWNER@owner_id/NAME@repo_id`:
-   - **`gha-tf-shared` (apply)** — trust that path on `ref:refs/heads/main` and `ref:refs/tags/prod-v*`
+   - **`gha-tf-shared` (apply)** — trust `environment:dev` / `staging` (nonprod) or `environment:prod` (prod); must match workflow `environment:`
    - **`gha-tf-shared-plan` (plan)** — trust that path’s `pull_request` (PR terraform plan)
 2. Workflows call [`.github/actions/setup-aws-creds`](.github/actions/setup-aws-creds/action.yml) with the matrix role ARN from `environments.yaml` (`aws_role_arn` for apply-main / apply-prod; `aws_plan_role_arn` for PR plan).
 3. Jobs need `permissions: id-token: write`.
