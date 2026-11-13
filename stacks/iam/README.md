@@ -25,8 +25,7 @@ Set the same path in this stack’s tfvars as `github_repository`.
 
 Then take ownership in this stack:
 
-1. Uncomment the `import` blocks in `import.tf` (set account id / role names).
-2. Init and apply:
+1. Set `import_*` values in tfvars (see `import.tf`), then init and apply:
 
    ```bash
    bash .github/scripts/ci-terraform.sh init nonprod iam   # or prod
@@ -35,8 +34,8 @@ Then take ownership in this stack:
    terraform apply -var-file=nonprod.tfvars
    ```
 
-3. Comment/remove `import` blocks after the resources are in state.
-4. CI: apply-main / apply-prod use the **apply** role; PR `ci` uses the **plan** role.
+2. Comment/remove `import` blocks (and `import_*` vars) after the resources are in state.
+3. CI: apply-main / apply-prod use the **apply** role; PR `ci` uses the **plan** role.
 
 ## Extending
 

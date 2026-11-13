@@ -14,7 +14,7 @@ Account-scoped envs: **`nonprod` | `prod`** (see [`environments.yaml`](../../env
 
    Script creates the bucket only. This stack owns hardening (versioning, encryption, public access block, ownership, deny-insecure policy, tags).
 
-2. Ensure `import.tf` points at that bucket name (nonprod import is checked in; adjust for prod / other accounts).
+2. Set `import_aws_s3_bucket_state` in tfvars to that bucket name (nonprod values are checked in; adjust for prod / other accounts).
 
 3. Init this stack:
 
